@@ -2,8 +2,8 @@ use serenity::framework::standard::macros::group;
 
 use crate::{
     commands::{
-        ciphers::*, config::*, images::*, japan::*, music::REMOVE_COMMAND, music::*, other::*,
-        starboard::*, support::*, textchannel_send::*, textmod::*, utility::*,
+        config::*, images::*, japan::*, music::REMOVE_COMMAND, music::*, other::*, starboard::*,
+        support::*, textchannel_send::*, textmod::*, utility::*,
     },
     helpers::voice_utils::*,
 };
@@ -14,7 +14,6 @@ use crate::{
     General,
     Text,
     TextLast,
-    Ciphers,
     TextChannelSend,
     Config,
     Support,
@@ -41,11 +40,6 @@ pub struct Text;
 #[help_available(false)]
 #[commands(mockl, invl, uppl, lowl, spacel, biggspacel)]
 pub struct TextLast;
-
-#[group("Ciphers")]
-#[description = "Commands that encode/decode messages"]
-#[commands(b64encode, b64decode)]
-pub struct Ciphers;
 
 #[group("Senders")]
 #[description = "Commands that send certain messages to channels"]

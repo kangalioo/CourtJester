@@ -1,59 +1,61 @@
-use serenity::{
-    framework::standard::{macros::command, Args, CommandResult},
-    model::prelude::*,
-    prelude::*,
-};
+use serenity::{framework::standard::CommandResult, model::prelude::*};
 
-use crate::JesterError;
+use crate::{Context, JesterError};
 
 /// Encodes a message in base64
 /// Usage `b64encode <message>`
-#[command]
-async fn b64encode(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let b64_string = base64::encode(args.rest());
+#[poise::command(slash_command, track_edits)]
+pub async fn b64encode(
+    ctx: Context<'_>,
+    #[rest]
+    #[description = "Plain string to encode"]
+    string: String,
+) -> CommandResult {
+    let b64_string = base64::encode(string);
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Base64 Engine");
-                e.description(format!("Encoded Message: `{}`", b64_string));
-                e
-            })
+    poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Base64 Engine");
+            e.description(format!("Encoded Message: `{}`", b64_string));
+            e
         })
-        .await?;
+    })
+    .await?;
     Ok(())
 }
 
 /// Decodes a message in base64
 /// Usage `b64encode <message>`
-#[command]
-async fn b64decode(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let b64_bytes = match base64::decode(args.rest()) {
+#[poise::command(slash_command, track_edits)]
+pub async fn b64decode(
+    ctx: Context<'_>,
+    #[rest]
+    #[description = "Base64-encoded payload to decode"]
+    string: String,
+) -> CommandResult {
+    let b64_bytes = match base64::decode(string) {
         Ok(bytes) => bytes,
         Err(_error) => {
-            msg.channel_id
-                .say(ctx, JesterError::MissingError("base64 string"))
-                .await?;
+            poise::say_reply(ctx, JesterError::MissingError("base64 string").to_string()).await?;
             return Ok(());
         }
     };
 
     let decoded_string = String::from_utf8(b64_bytes).unwrap();
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Base64 Engine");
-                e.description(format!("Decoded Message: `{}`", decoded_string));
-                e
-            })
+    poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Base64 Engine");
+            e.description(format!("Decoded Message: `{}`", decoded_string));
+            e
         })
-        .await?;
+    })
+    .await?;
 
     Ok(())
 }
 
-pub async fn cipher_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn cipher_help(ctx: &serenity::prelude::Context, channel_id: ChannelId) {
     let content = concat!(
         "b64encode <message>: Encodes a message in base64 \n\n",
         "b64decode <b64 string>: Decodes a base64 message"

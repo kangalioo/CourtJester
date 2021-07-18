@@ -27,7 +27,6 @@ pub fn get_framework(bot_id: UserId, owners: HashSet<UserId>) -> StandardFramewo
         .group(&GENERAL_GROUP)
         .group(&TEXT_GROUP)
         .group(&TEXTLAST_GROUP)
-        .group(&CIPHERS_GROUP)
         .group(&TEXTCHANNELSEND_GROUP)
         .group(&CONFIG_GROUP)
         .group(&SUPPORT_GROUP)

@@ -17,13 +17,24 @@ use dashmap::DashMap;
 use futures::future::AbortHandle;
 use lavalink_rs::LavalinkClient;
 use reqwest::Client as Reqwest;
-use serenity::{client::bridge::gateway::GatewayIntents, framework::{StandardFramework, standard::{CommandError, CommandResult}}, http::Http, model::id::{ApplicationId, GuildId}, prelude::*};
+use serenity::{
+    client::bridge::gateway::GatewayIntents,
+    framework::{
+        standard::{CommandError, CommandResult},
+        StandardFramework,
+    },
+    http::Http,
+    model::id::{ApplicationId, GuildId},
+    prelude::*,
+};
 use songbird::SerenityInit;
 use std::{
     collections::{HashMap, HashSet},
     env,
     sync::{atomic::AtomicBool, Arc},
 };
+
+pub type Context<'a> = poise::Context<'a, Data, CommandError>;
 
 #[tokio::main]
 async fn main() -> CommandResult {
@@ -138,7 +149,17 @@ async fn main() -> CommandResult {
         data_struct
     };
 
-    let options = poise::FrameworkOptions::<Data, CommandError>::default();
+    let mut options = poise::FrameworkOptions::<Data, CommandError> {
+        prefix_options: poise::PrefixFrameworkOptions {
+            edit_tracker: Some(poise::EditTracker::for_timespan(
+                std::time::Duration::from_secs(3600),
+            )),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    options.command(commands::ciphers::b64decode(), |f| f);
+    options.command(commands::ciphers::b64encode(), |f| f);
     let framework = poise::Framework::new(
         creds.default_prefix,
         ApplicationId(bot_id.0),
