@@ -20,10 +20,12 @@ regex = "1.4.3"
 songbird = { version = "0.1", default-features = false, features = ["serenity-native", "gateway"] }
 lavalink-rs = { version = "0.7.0", features = ["native", "serenity"] }
 aspotify = "0.7.0"
+# poise = { git = "https://github.com/kangalioo/poise" }
+poise = { path = "../../poise" }
 
 [dependencies.serenity]
-git = "https://github.com/serenity-rs/serenity"
-branch = "current"
+git = "https://github.com/kangalioo/serenity"
+branch = "poise-tailored"
 default-features = true
 features = ["model", "collector", "native_tls_backend", "voice"]
 
@@ -37,7 +39,7 @@ version = "0.10"
 features = ["vendored"]
 
 [patch.crates-io.serenity]
-git = "https://github.com/serenity-rs/serenity"
-branch = "current"
+git = "https://github.com/kangalioo/serenity"
+branch = "poise-tailored"
 default-features = true
 features = ["collector", "rustls_backend"]

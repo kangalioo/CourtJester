@@ -17,10 +17,7 @@ use dashmap::DashMap;
 use futures::future::AbortHandle;
 use lavalink_rs::LavalinkClient;
 use reqwest::Client as Reqwest;
-use serenity::{
-    client::bridge::gateway::GatewayIntents, framework::standard::CommandResult, http::Http,
-    model::id::GuildId, prelude::*,
-};
+use serenity::{client::bridge::gateway::GatewayIntents, framework::{StandardFramework, standard::{CommandError, CommandResult}}, http::Http, model::id::{ApplicationId, GuildId}, prelude::*};
 use songbird::SerenityInit;
 use std::{
     collections::{HashMap, HashSet},
@@ -60,7 +57,7 @@ async fn main() -> CommandResult {
 
     let mut pub_creds = HashMap::new();
     pub_creds.insert("tenor".to_string(), creds.tenor_key);
-    pub_creds.insert("default prefix".to_string(), creds.default_prefix);
+    pub_creds.insert("default prefix".to_string(), creds.default_prefix.clone());
 
     let client_credentials = ClientCredentials {
         id: creds.spotify_client_id,
@@ -89,6 +86,7 @@ async fn main() -> CommandResult {
         .build()?;
 
     let mut client = Client::builder(&token)
+        .application_id(bot_id.0)
         .framework(get_framework(bot_id, owners))
         .event_handler(SerenityHandler {
             run_loop: AtomicBool::new(true),
@@ -104,7 +102,23 @@ async fn main() -> CommandResult {
         .await
         .expect("Err creating client");
 
-    {
+    let data = {
+        let spotify_client = Arc::new(spotify);
+        let data_struct = Data {
+            connection_pool: pool.clone(),
+            shard_manager_container: Arc::clone(&client.shard_manager),
+            lavalink: lava_client.clone(),
+            voice_timer_map: Arc::new(voice_timer_map.clone()),
+            prefix_map: Arc::new(prefixes.clone()),
+            command_name_map: Arc::new(command_names.clone()),
+            reqwest_client: reqwest_client.clone(),
+            pub_creds: Arc::new(pub_creds.clone()),
+            emergency_commands: Arc::new(emergency_commands.clone()),
+            bot_id,
+            spotify_client: Arc::clone(&spotify_client),
+            reaction_image_cache: Arc::new(DashMap::new()),
+        };
+
         // Insert all structures into ctx data
         let mut data = client.data.write().await;
 
@@ -118,12 +132,25 @@ async fn main() -> CommandResult {
         data.insert::<PubCreds>(Arc::new(pub_creds));
         data.insert::<EmergencyCommands>(Arc::new(emergency_commands));
         data.insert::<BotId>(bot_id);
-        data.insert::<SpotifyClient>(Arc::new(spotify));
+        data.insert::<SpotifyClient>(Arc::clone(&spotify_client));
         data.insert::<ReactionImageCache>(Arc::new(DashMap::new()));
-    }
+
+        data_struct
+    };
+
+    let options = poise::FrameworkOptions::<Data, CommandError>::default();
+    let framework = poise::Framework::new(
+        creds.default_prefix,
+        ApplicationId(bot_id.0),
+        |_, _, _| Box::pin(async { Ok(data) }),
+        options,
+    );
 
     // Start up the bot! If there's an error, let the user know
-    if let Err(why) = client.start_autosharded().await {
+    if let Err(why) = tokio::try_join!(
+        client.start_autosharded(),
+        framework.start(Client::builder(&token).framework(StandardFramework::new()))
+    ) {
         eprintln!("Client error: {:?}", why);
     }
 

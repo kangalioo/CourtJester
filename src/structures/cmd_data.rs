@@ -83,3 +83,18 @@ pub struct ReactionImageCache;
 impl TypeMapKey for ReactionImageCache {
     type Value = Arc<DashMap<(GuildId, String), String>>;
 }
+
+pub struct Data {
+    pub shard_manager_container: Arc<Mutex<ShardManager>>,
+    pub connection_pool: PgPool,
+    pub lavalink: LavalinkClient,
+    pub voice_timer_map: Arc<DashMap<GuildId, AbortHandle>>,
+    pub command_name_map: Arc<Vec<String>>,
+    pub reqwest_client: Reqwest,
+    pub pub_creds: Arc<HashMap<String, String>>,
+    pub bot_id: UserId,
+    pub prefix_map: Arc<DashMap<GuildId, String>>,
+    pub emergency_commands: Arc<Vec<String>>,
+    pub spotify_client: Arc<Spotify>,
+    pub reaction_image_cache: Arc<DashMap<(GuildId, String), String>>,
+}
