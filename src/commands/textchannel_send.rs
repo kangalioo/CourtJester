@@ -312,7 +312,6 @@ async fn quote(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                         a.icon_url(&avatar_id);
                         a
                     });
-                    e.description(args.rest());
                 } else {
                     e.author(|a| {
                         a.name(&msg.mentions[0].name);
@@ -320,8 +319,8 @@ async fn quote(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                         a
                     });
                     args.advance();
-                    e.description(args.rest());
                 }
+                e.description(args.rest());
                 e.field("Source", format!("[Jump!]({})", message_url), false)
             })
         })
