@@ -41,7 +41,7 @@ async fn main() -> CommandResult {
     tracing_subscriber::fmt::init();
 
     let args: Vec<String> = env::args().collect();
-    let creds = helpers::credentials_helper::read_creds(&args[1])?;
+    let creds = helpers::credentials_helper::read_creds(&args[1], env::var("DATABASE_URL")?)?;
     let token = &creds.bot_token;
 
     let http = Http::new_with_token(&token);
