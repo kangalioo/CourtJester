@@ -1,18 +1,10 @@
 use rand::prelude::*;
-use serenity::{
-    framework::standard::{macros::command, Args, CommandResult},
-    model::prelude::*,
-    prelude::*,
-    utils::{parse_channel, parse_username},
-};
+use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use crate::{
-    helpers::{command_utils, permissions_helper},
-    ConnectionPool,
-};
+use crate::helpers::{command_utils, permissions_helper};
 
 struct TextChannels {
     nice_id: Option<i64>,
@@ -20,78 +12,104 @@ struct TextChannels {
     quote_id: Option<i64>,
 }
 
+/// If prefix: gets invoking message link
+/// If slash: sends a response and retrieves its link
+/// When send_in_any_case true, the response is sent in any case
+async fn get_or_send_message_url(
+    ctx: crate::Context<'_>,
+    guild_id: GuildId,
+    response: &str,
+    send_in_any_case: bool,
+) -> CommandResult<String> {
+    Ok(match ctx {
+        crate::Context::Prefix(ctx) => {
+            if send_in_any_case {
+                poise::say_prefix_reply(ctx, response.into()).await?;
+            }
+            command_utils::get_message_url(guild_id, ctx.msg.channel_id, ctx.msg.id)
+        }
+        crate::Context::Slash(ctx) => {
+            // Sending a message is crucial for two reasons:
+            // - the interaction is shown as failed if we don't send a response
+            // - we need a message to link to
+            poise::say_slash_reply(ctx, response.into()).await?;
+            ctx.interaction
+                .channel_id
+                .messages(ctx.discord, |f| f.limit(1))
+                .await?[0]
+                .link_ensured(ctx.discord)
+                .await
+        }
+    })
+}
+
 /// Sends `nice` to a specified channel. Provide a channel as the first argument to set it
+///
 /// Usage: `nice <message>` or `nice <channel>`
-#[command]
-async fn nice(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
+#[poise::command(slash_command)]
+pub async fn nice(
+    ctx: crate::Context<'_>,
+    #[description = "Specify a target channel for future invocations of this command (moderators only)"]
+    channel: Option<ChannelId>,
+) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
 
-    let test_id = args.single::<String>().unwrap_or_default();
-
-    let pool = ctx
-        .data
-        .read()
-        .await
-        .get::<ConnectionPool>()
-        .cloned()
-        .unwrap();
+    let pool = &ctx.data().connection_pool;
 
     let check = sqlx::query!(
         "SELECT EXISTS(SELECT nice_id FROM text_channels WHERE guild_id = $1)",
         guild_id.0 as i64
     )
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await?;
 
-    if let Some(channel_id) = parse_channel(&test_id) {
-        if permissions_helper::check_permission(ctx, &msg, None, false).await? {
+    if let Some(channel_id) = channel {
+        if permissions_helper::check_permission_2(ctx, None, false).await? {
             if check.exists.unwrap() {
                 sqlx::query!(
                     "UPDATE text_channels SET nice_id = $1 WHERE guild_id = $2",
-                    channel_id as i64,
+                    channel_id.0 as i64,
                     guild_id.0 as i64
                 )
-                .execute(&pool)
+                .execute(pool)
                 .await?;
             } else {
-                insert_or_update(&pool, guild_id, "nice", channel_id as i64).await?;
+                insert_or_update(pool, guild_id, "nice", channel_id.0 as i64).await?;
             }
 
-            msg.channel_id.say(ctx, "Channel sucessfully set!").await?;
+            poise::say_reply(ctx, "Channel sucessfully set!".into()).await?;
         }
 
         return Ok(());
     }
 
-    if !args.is_empty() {
-        msg.channel_id
-            .say(ctx, "Please execute this command without any arguments")
-            .await?;
-        return Ok(());
-    }
-
     if !check.exists.unwrap() {
-        msg.channel_id
-            .say(ctx, "The Nice channel isn't set! Please specify a channel!")
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The Nice channel isn't set! Please specify a channel!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let channel_num = get_channels(&pool, guild_id).await?;
+    let channel_num = get_channels(pool, guild_id).await?;
 
     if channel_num.nice_id.is_none() {
-        msg.channel_id
-            .say(ctx, "The Nice channel isn't set! Please specify a channel!")
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The Nice channel isn't set! Please specify a channel!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let message_url = command_utils::get_message_url(msg.guild_id.unwrap(), msg.channel_id, msg.id);
+    let message_url = get_or_send_message_url(ctx, guild_id, "Nice indeed", false).await?;
+
     ChannelId(channel_num.nice_id.unwrap() as u64)
-        .send_message(ctx, |m| {
+        .send_message(ctx.discord(), |m| {
             m.embed(|e| {
                 e.color(0x290e05);
-                e.title(format!("Nice - {}", msg.author.name));
+                e.title(format!("Nice - {}", ctx.author().name));
                 e.field("Source", format!("[Jump!]({})", message_url), false)
             })
         })
@@ -101,82 +119,75 @@ async fn nice(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 }
 
 /// Sends `bruh` to a specified channel. Provide a channel as the first argument to set it
+///
 /// Usage: `bruh <message>` or `bruh <channel>`
-#[command]
-async fn bruh(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
+#[poise::command(slash_command)]
+pub async fn bruh(
+    ctx: crate::Context<'_>,
+    #[description = "Specify a target channel for future invocations of this command (moderators only)"]
+    channel: Option<ChannelId>,
+) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
 
-    let test_id = args.single::<String>().unwrap_or_default();
-
-    let pool = ctx
-        .data
-        .read()
-        .await
-        .get::<ConnectionPool>()
-        .cloned()
-        .unwrap();
+    let pool = &ctx.data().connection_pool;
 
     let check = sqlx::query!(
         "SELECT EXISTS(SELECT bruh_id FROM text_channels WHERE guild_id = $1)",
         guild_id.0 as i64
     )
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await?;
 
-    if let Some(channel_id) = parse_channel(&test_id) {
-        if permissions_helper::check_permission(ctx, msg, None, false).await? {
+    if let Some(channel_id) = channel {
+        if permissions_helper::check_permission_2(ctx, None, false).await? {
             if check.exists.unwrap() {
                 sqlx::query!(
                     "UPDATE text_channels SET bruh_id = $1 WHERE guild_id = $2",
-                    channel_id as i64,
+                    channel_id.0 as i64,
                     guild_id.0 as i64
                 )
-                .execute(&pool)
+                .execute(pool)
                 .await?;
             } else {
-                insert_or_update(&pool, guild_id, "bruh", channel_id as i64).await?;
+                insert_or_update(pool, guild_id, "bruh", channel_id.0 as i64).await?;
             }
 
-            msg.channel_id.say(ctx, "Channel sucessfully set!").await?;
+            poise::say_reply(ctx, "Channel sucessfully set!".into()).await?;
         }
 
         return Ok(());
     }
 
-    if !args.is_empty() {
-        msg.channel_id
-            .say(ctx, "Please execute this command without any arguments")
-            .await?;
-        return Ok(());
-    }
-
     if !check.exists.unwrap() {
-        msg.channel_id
-            .say(ctx, "The Bruh channel isn't set! Please specify a channel!")
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The Bruh channel isn't set! Please specify a channel!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let channel_nums = get_channels(&pool, guild_id).await?;
+    let channel_nums = get_channels(pool, guild_id).await?;
 
     if channel_nums.bruh_id.is_none() {
-        msg.channel_id
-            .say(ctx, "The Bruh channel isn't set! Please specify a channel!")
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The Bruh channel isn't set! Please specify a channel!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let message_url = command_utils::get_message_url(msg.guild_id.unwrap(), msg.channel_id, msg.id);
+    let message_url = get_or_send_message_url(ctx, guild_id, "***BRUH MOMENT***", true).await?;
 
-    msg.channel_id.say(ctx, "***BRUH MOMENT***").await?;
     ChannelId(channel_nums.bruh_id.unwrap() as u64)
-        .send_message(ctx, |m| {
+        .send_message(ctx.discord(), |m| {
             m.embed(|e| {
                 e.color(0xfc5e03);
                 e.title("Ladies and Gentlemen!");
                 e.description(format!(
                     "A bruh moment has been declared by {}",
-                    msg.author.mention()
+                    ctx.author().mention()
                 ));
                 e.field("Source", format!("[Jump!]({})", message_url), false)
             })
@@ -187,36 +198,36 @@ async fn bruh(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 }
 
 /// Quotes yourself or a specified user
+///
 /// Usage: `quote <user mention> <content>` or `quote <content>`
-#[command]
-async fn quote(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let mut self_quote = true;
+#[poise::command(slash_command)]
+pub async fn quote(
+    ctx: crate::Context<'_>,
+    // TODO: make these work properly
+    #[description = "Who said the quote"] quoted_user: Option<Member>,
+    #[description = "Specify a target channel for future invocations of this command (moderators only)"]
+    channel: Option<ChannelId>,
+    #[rest]
+    #[description = "Content of the quote"]
+    quote_content: Option<String>,
+) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
 
-    let test_id = args.parse::<String>().unwrap_or_default();
-
-    let pool = ctx
-        .data
-        .read()
-        .await
-        .get::<ConnectionPool>()
-        .cloned()
-        .unwrap();
+    let pool = &ctx.data().connection_pool;
 
     let starboard_data = sqlx::query!(
         "SELECT starboard_threshold FROM guild_info WHERE guild_id = $1",
         guild_id.0 as i64
     )
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await?;
 
     if starboard_data.starboard_threshold.is_some() {
-        msg.channel_id
-            .say(
-                ctx,
-                "You can't use the quote command because starboard is enabled in this server!",
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            "You can't use the quote command because starboard is enabled in this server!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
@@ -224,103 +235,70 @@ async fn quote(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         "SELECT EXISTS(SELECT quote_id FROM text_channels WHERE guild_id = $1)",
         guild_id.0 as i64
     )
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await?;
 
-    if let Some(channel_id) = parse_channel(&test_id) {
-        if permissions_helper::check_permission(ctx, msg, None, false).await? {
+    if let Some(channel_id) = channel {
+        if permissions_helper::check_permission_2(ctx, None, false).await? {
             if check.exists.unwrap() {
                 sqlx::query!(
                     "UPDATE text_channels SET quote_id = $1 WHERE guild_id = $2",
-                    channel_id as i64,
+                    channel_id.0 as i64,
                     guild_id.0 as i64
                 )
-                .execute(&pool)
+                .execute(pool)
                 .await?;
             } else {
-                insert_or_update(&pool, guild_id, "quote", channel_id as i64).await?;
+                insert_or_update(pool, guild_id, "quote", channel_id.0 as i64).await?;
             }
 
-            msg.channel_id.say(ctx, "Channel sucessfully set!").await?;
+            poise::say_reply(ctx, "Channel sucessfully set!".into()).await?;
         }
 
         return Ok(());
     }
 
     if !check.exists.unwrap() {
-        msg.channel_id
-            .say(
-                ctx,
-                "The Quote channel isn't set! Please specify a channel!",
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The Quote channel isn't set! Please specify a channel!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    if parse_username(&test_id).is_some() {
-        self_quote = false;
-    }
-
-    if args.is_empty() || test_id.is_empty() {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please provide the quote (with author if you are quoting someone else)",
-            )
-            .await?;
-        return Ok(());
-    }
-
-    let channels = get_channels(&pool, guild_id).await?;
+    let channels = get_channels(pool, guild_id).await?;
 
     if channels.quote_id.is_none() {
-        msg.channel_id
-            .say(
-                ctx,
-                "The Quote channel isn't set! Please specify a channel!",
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The Quote channel isn't set! Please specify a channel!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let message_url = command_utils::get_message_url(msg.guild_id.unwrap(), msg.channel_id, msg.id);
+    let message_url = get_or_send_message_url(ctx, guild_id, "Successfully quoted", false).await?;
 
-    let avatar_option = if self_quote {
-        msg.author.avatar_url()
-    } else {
-        msg.mentions[0].avatar_url()
+    let user = match &quoted_user {
+        Some(user) => &user.user,
+        None => ctx.author(),
     };
 
-    let avatar_id = match avatar_option {
-        Some(avatar_id) => avatar_id,
-        None => {
-            if self_quote {
-                msg.author.default_avatar_url()
-            } else {
-                msg.mentions[0].default_avatar_url()
-            }
-        }
-    };
+    let avatar_id = user
+        .avatar_url()
+        .unwrap_or_else(|| user.default_avatar_url());
 
     ChannelId(channels.quote_id.unwrap() as u64)
-        .send_message(ctx, |m| {
+        .send_message(ctx.discord(), |m| {
             m.embed(|e| {
                 e.color(0xfabe21);
-                if self_quote {
-                    e.author(|a| {
-                        a.name(&msg.author.name);
-                        a.icon_url(&avatar_id);
-                        a
-                    });
-                } else {
-                    e.author(|a| {
-                        a.name(&msg.mentions[0].name);
-                        a.icon_url(&avatar_id);
-                        a
-                    });
-                    args.advance();
-                }
-                e.description(args.rest());
+                e.author(|a| {
+                    a.name(&user.name);
+                    a.icon_url(&avatar_id);
+                    a
+                });
+                e.description(quote_content.unwrap_or_default());
                 e.field("Source", format!("[Jump!]({})", message_url), false)
             })
         })
@@ -329,9 +307,10 @@ async fn quote(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     Ok(())
 }
 
-#[command]
-async fn vibecheck(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(ctx, "Initiating vibe check...").await?;
+/// Will you pass the vibecheck?
+#[poise::command(slash_command)]
+pub async fn vibecheck(ctx: crate::Context<'_>) -> CommandResult {
+    poise::say_reply(ctx, "Initiating vibe check...".into()).await?;
 
     sleep(Duration::from_secs(3)).await;
 
@@ -348,26 +327,24 @@ async fn vibecheck(ctx: &Context, msg: &Message) -> CommandResult {
 
         let val = rng.gen_range(0..=success_vec.len() - 1);
 
-        msg.channel_id
-            .say(
-                ctx,
-                format!(
-                    "{} has passed the vibe check. {}.",
-                    msg.author.mention(),
-                    success_vec[val]
-                ),
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            format!(
+                "{} has passed the vibe check. {}.",
+                ctx.author().mention(),
+                success_vec[val]
+            ),
+        )
+        .await?;
     } else {
-        msg.channel_id
-            .say(
-                ctx,
-                format!(
-                    "{} has failed the vibe check. Show me your vibing license!",
-                    msg.author.mention()
-                ),
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            format!(
+                "{} has failed the vibe check. Show me your vibing license!",
+                ctx.author().mention()
+            ),
+        )
+        .await?;
     }
     Ok(())
 }

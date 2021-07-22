@@ -37,3 +37,43 @@ pub async fn check_permission(
         Ok(permissions.manage_messages())
     }
 }
+
+pub async fn check_permission_2(
+    ctx: crate::Context<'_>,
+    user_id: Option<UserId>,
+    check_admin: bool,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let channel = ctx
+        .channel_id()
+        .to_channel(ctx.discord())
+        .await
+        .unwrap()
+        .guild()
+        .unwrap();
+    let permissions = channel
+        .permissions_for_user(ctx.discord(), user_id.unwrap_or(ctx.author().id))
+        .await?;
+
+    if permissions.administrator() {
+        Ok(true)
+    } else if check_admin && user_id.is_none() {
+        poise::say_reply(
+            ctx,
+            JesterError::PermissionError(PermissionType::UserPerm("administrator")).to_string(),
+        )
+        .await?;
+
+        Ok(false)
+    } else {
+        if user_id.is_none() && !permissions.manage_messages() {
+            poise::say_reply(
+                ctx,
+                JesterError::PermissionError(PermissionType::UserPerm("manage messages"))
+                    .to_string(),
+            )
+            .await?;
+        }
+
+        Ok(permissions.manage_messages())
+    }
+}

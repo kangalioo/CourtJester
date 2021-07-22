@@ -2,8 +2,7 @@ use serenity::framework::standard::macros::group;
 
 use crate::{
     commands::{
-        config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*, support::*,
-        textchannel_send::*, textmod::*, utility::*,
+        config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*, textmod::*, utility::*,
     },
     helpers::voice_utils::*,
 };
@@ -42,7 +41,6 @@ pub struct TextLast;
 
 #[group("Senders")]
 #[description = "Commands that send certain messages to channels"]
-#[commands(nice, bruh, quote, vibecheck)]
 pub struct TextChannelSend;
 
 #[group("Bot Configuration")]
@@ -52,7 +50,6 @@ pub struct Config;
 
 #[group("Support")]
 #[description = "Support commands for the bot"]
-#[commands(help, support, info)]
 pub struct Support;
 
 #[group("Starboard")]

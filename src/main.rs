@@ -170,6 +170,13 @@ async fn main() -> CommandResult {
     options.command(commands::images::gifsearch(), |f| f);
     options.command(commands::other::register(), |f| f);
     options.command(commands::other::ping(), |f| f);
+    options.command(commands::support::help(), |f| f);
+    options.command(commands::support::support(), |f| f);
+    options.command(commands::support::info(), |f| f);
+    options.command(commands::textchannel_send::nice(), |f| f);
+    options.command(commands::textchannel_send::bruh(), |f| f);
+    options.command(commands::textchannel_send::quote(), |f| f);
+    options.command(commands::textchannel_send::vibecheck(), |f| f);
 
     let prefix_and_slash_command = (
         commands::images::prefix_hug().0,

@@ -1,27 +1,15 @@
-use serenity::{
-    client::{bridge::gateway::ShardId, Context},
-    framework::standard::CommandResult,
-};
+use serenity::{client::bridge::gateway::ShardId, framework::standard::CommandResult};
 use std::{env, process};
 use tokio::process::Command;
 
-use crate::structures::{
-    cmd_data::{ReqwestClient, ShardManagerContainer},
-    CommitResponse, SysInfo,
-};
+use crate::structures::{CommitResponse, SysInfo};
 
 pub async fn get_last_commit(
-    ctx: &Context,
+    ctx: crate::Context<'_>,
 ) -> Result<CommitResponse, Box<dyn std::error::Error + Send + Sync>> {
-    let reqwest_client = ctx
-        .data
-        .read()
-        .await
-        .get::<ReqwestClient>()
-        .cloned()
-        .unwrap();
-
-    let resp = reqwest_client
+    let resp = ctx
+        .data()
+        .reqwest_client
         .get("https://api.github.com/repos/bdashore3/courtjester/commits/serenity")
         .send()
         .await?
@@ -31,20 +19,12 @@ pub async fn get_last_commit(
     Ok(resp)
 }
 
-pub async fn get_system_info(ctx: &Context) -> CommandResult<SysInfo> {
-    let shard_manager = ctx
-        .data
-        .read()
-        .await
-        .get::<ShardManagerContainer>()
-        .cloned()
-        .unwrap();
-
+pub async fn get_system_info(ctx: crate::Context<'_>) -> CommandResult<SysInfo> {
     let shard_latency = {
-        let manager = shard_manager.lock().await;
+        let manager = ctx.data().shard_manager_container.lock().await;
         let runners = manager.runners.lock().await;
 
-        let runner_raw = runners.get(&ShardId(ctx.shard_id));
+        let runner_raw = runners.get(&ShardId(ctx.discord().shard_id));
         match runner_raw {
             Some(runner) => match runner.latency {
                 Some(ms) => format!("{}ms", ms.as_millis()),
