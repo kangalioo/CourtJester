@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[allow(dead_code)]
+#[allow(dead_code, clippy::enum_variant_names)]
 #[derive(Debug)]
 pub enum JesterError<'a> {
     PermissionError(PermissionType<'a>),
