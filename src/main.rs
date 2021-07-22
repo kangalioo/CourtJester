@@ -35,6 +35,7 @@ use std::{
 };
 
 pub type Context<'a> = poise::Context<'a, Data, CommandError>;
+pub type PrefixContext<'a> = poise::PrefixContext<'a, Data, CommandError>;
 
 #[tokio::main]
 async fn main() -> CommandResult {
@@ -158,8 +159,41 @@ async fn main() -> CommandResult {
         },
         ..Default::default()
     };
+
     options.command(commands::ciphers::b64decode(), |f| f);
     options.command(commands::ciphers::b64encode(), |f| f);
+    options.command(commands::images::disgust(), |f| f);
+    options.command(commands::images::cry(), |f| f);
+    options.command(commands::images::cringe(), |f| f);
+    options.command(commands::images::gifsearch(), |f| f);
+    options.command(commands::other::register(), |f| f);
+    options.command(commands::other::ping(), |f| f);
+
+    let prefix_and_slash_command = (
+        commands::images::prefix_hug().0,
+        commands::images::slash_hug().1,
+    );
+    options.command(prefix_and_slash_command, |f| f);
+
+    let prefix_and_slash_command = (
+        commands::images::prefix_pat().0,
+        commands::images::slash_pat().1,
+    );
+    options.command(prefix_and_slash_command, |f| f);
+
+    let prefix_and_slash_command = (
+        commands::images::prefix_kiss().0,
+        commands::images::slash_kiss().1,
+    );
+
+    options.command(prefix_and_slash_command, |f| f);
+    let prefix_and_slash_command = (
+        commands::images::prefix_slap().0,
+        commands::images::slash_slap().1,
+    );
+
+    options.command(prefix_and_slash_command, |f| f);
+
     let framework = poise::Framework::new(
         creds.default_prefix,
         ApplicationId(bot_id.0),

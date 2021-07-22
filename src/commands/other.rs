@@ -1,12 +1,10 @@
-use serenity::{
-    framework::standard::{macros::command, CommandResult},
-    model::prelude::*,
-    prelude::*,
-};
+use crate::Context;
+use serenity::framework::standard::CommandResult;
 
-#[command]
-async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(ctx, "Pong!").await?;
+/// Prints "Pong!". Quick and easy way to see if the bot's online.
+#[poise::command(slash_command)]
+pub async fn ping(ctx: Context<'_>) -> CommandResult {
+    poise::say_reply(ctx, "Pong!".into()).await?;
 
     Ok(())
 }
