@@ -2,8 +2,8 @@ use serenity::framework::standard::macros::group;
 
 use crate::{
     commands::{
-        config::*, images::*, japan::*, music::REMOVE_COMMAND, music::*, other::*, starboard::*,
-        support::*, textchannel_send::*, textmod::*, utility::*,
+        config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*, support::*,
+        textchannel_send::*, textmod::*, utility::*,
     },
     helpers::voice_utils::*,
 };
@@ -26,7 +26,6 @@ pub struct Master;
 
 #[group]
 #[help_available(false)]
-#[commands(ping)]
 pub struct General;
 
 #[group("Text Modification")]
@@ -73,7 +72,6 @@ pub struct Music;
 
 #[group("Images")]
 #[description = "Commands for fetching/sending images"]
-#[commands(hug, kiss, pat, slap, disgust, cry, cringe, gifsearch)]
 pub struct Images;
 
 #[group("Japan")]
