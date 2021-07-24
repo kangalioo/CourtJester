@@ -9,30 +9,18 @@ use serenity::{
 
 use crate::JesterError;
 
-#[command]
-async fn avatar(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let user = if let Ok(user_id) = args.single::<UserId>() {
-        match user_id.to_user(ctx).await {
-            Ok(user) => Cow::Owned(user),
-            Err(_) => {
-                msg.channel_id
-                    .say(ctx, JesterError::MissingError("User ID/mention"))
-                    .await?;
-
-                return Ok(());
-            }
-        }
-    } else if args.is_empty() {
-        Cow::Borrowed(&msg.author)
-    } else {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("User ID/mention"))
-            .await?;
-
-        return Ok(());
+/// Gets your own, or the mentioned person's avatar
+#[poise::command(slash_command, track_edits)]
+pub async fn avatar(
+    ctx: crate::Context<'_>,
+    #[description = "Whose user's avatar do you want to see?"] user: Option<Member>,
+) -> CommandResult {
+    let user = match &user {
+        Some(user) => &user.user,
+        None => ctx.author(),
     };
 
-    msg.channel_id.say(ctx, user.face()).await?;
+    poise::say_reply(ctx, user.face()).await?;
 
     Ok(())
 }
@@ -40,7 +28,7 @@ async fn avatar(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 #[command]
 #[aliases("steal")]
 #[required_permissions("MANAGE_EMOJIS_AND_STICKERS")]
-async fn kang(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+pub async fn kang(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let emoji = match args.single::<EmojiIdentifier>() {
         Ok(id) => id,
         Err(_) => {
@@ -94,53 +82,44 @@ async fn kang(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     }
 }
 
-#[command]
-#[aliases("einfo")]
-pub async fn emoji_info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let emoji = match args.single::<EmojiIdentifier>() {
-        Ok(id) => id,
-        Err(_) => {
-            msg.channel_id
-                .say(ctx, JesterError::MissingError("custom emoji"))
-                .await?;
-
-            return Ok(());
-        }
-    };
-
+/// Get the information of an emoji
+#[poise::command(slash_command, track_edits, aliases("einfo"))]
+pub async fn emoji_info(
+    ctx: crate::Context<'_>,
+    #[description = "Which emoji to show information about"] emoji: EmojiIdentifier,
+) -> CommandResult {
     let emoji_url = emoji.url();
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Emoji info for...");
-                e.thumbnail(&emoji_url);
-                e.field("Name", emoji.name, false);
-                e.field("Emoji ID", emoji.id.0, false);
-                e.field("Image URL", format!("[Click here]({})", &emoji_url), false);
-                e.footer(|f| {
-                    f.text(format!(
-                        "Requested by {}#{}",
-                        msg.author.name, msg.author.discriminator
-                    ));
-                    f
-                });
-                e
-            })
+    poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Emoji info for...");
+            e.thumbnail(&emoji_url);
+            e.field("Name", emoji.name, false);
+            e.field("Emoji ID", emoji.id.0, false);
+            e.field("Image URL", format!("[Click here]({})", &emoji_url), false);
+            e.footer(|f| {
+                f.text(format!(
+                    "Requested by {}#{}",
+                    ctx.author().name,
+                    ctx.author().discriminator
+                ));
+                f
+            });
+            e
         })
-        .await?;
+    })
+    .await?;
 
     Ok(())
     // Embed with emoji name, image as thumbnail, and original link to image
 }
 
-#[command]
-async fn spoiler(ctx: &Context, msg: &Message) -> CommandResult {
-    let attachment = match msg.attachments.get(0) {
+#[poise::command]
+pub async fn spoiler(ctx: crate::PrefixContext<'_>) -> CommandResult {
+    let attachment = match ctx.msg.attachments.get(0) {
         Some(attachment) => attachment,
         None => {
-            msg.channel_id
-                .say(ctx, JesterError::MissingError("attachment"))
+            poise::say_prefix_reply(ctx, JesterError::MissingError("attachment").to_string())
                 .await?;
 
             return Ok(());
@@ -156,31 +135,28 @@ async fn spoiler(ctx: &Context, msg: &Message) -> CommandResult {
         filename: new_filename.to_owned(),
     };
 
-    let msg_result = msg
-        .channel_id
-        .send_message(ctx, |m| {
-            m.content(format!("Invoked by {}", msg.author.mention()));
-            m.add_file(new_attachment);
-            m
-        })
-        .await;
+    let msg_result = poise::send_prefix_reply(ctx, |m| {
+        m.content(format!("Invoked by {}", ctx.msg.author.mention()));
+        m.attachment(new_attachment);
+        m
+    })
+    .await;
 
     if msg_result.is_err() {
-        msg.channel_id
-            .say(
-                ctx,
-                "This file is too big! Please attach a file less than 8 MB...",
-            )
-            .await?;
+        poise::say_prefix_reply(
+            ctx,
+            "This file is too big! Please attach a file less than 8 MB...".into(),
+        )
+        .await?;
 
         return Ok(());
     }
 
-    if msg.delete(ctx).await.is_err() {
-        msg.channel_id.say(
+    if ctx.msg.delete(ctx.discord).await.is_err() {
+        poise::say_prefix_reply(
             ctx,
             concat!("The spoiled attachment was posted, but I cannot delete the old message! \n",
-            "Please give me the `MANAGE_MESSAGES` permission if you want the unspoiled image deleted!")
+            "Please give me the `MANAGE_MESSAGES` permission if you want the unspoiled image deleted!").into()
         ).await?;
 
         return Ok(());

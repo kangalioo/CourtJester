@@ -1,229 +1,219 @@
-use serenity::{
-    framework::standard::{macros::command, Args, CommandResult},
-    model::prelude::*,
-    prelude::*,
-};
+use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
 
-use crate::{helpers::*, JesterError};
+use crate::helpers::*;
+
+async fn get_last_message(ctx: crate::Context<'_>) -> CommandResult<Message> {
+    let message_iterator = match ctx {
+        crate::Context::Prefix(ctx) => {
+            ctx.msg
+                .channel_id
+                .messages(ctx.discord, |retriever| {
+                    retriever.before(ctx.msg.id).limit(1)
+                })
+                .await?
+        }
+        crate::Context::Slash(ctx) => {
+            ctx.interaction
+                .channel_id
+                .messages(ctx.discord, |f| f.limit(1))
+                .await?
+        }
+    };
+    Ok(message_iterator.into_iter().next().unwrap())
+}
 
 /// Outputs a spongebob mock string
+///
 /// Usage: `mock <message>`
-#[command]
-#[min_args(1)]
-pub async fn mock(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to mock"))
-            .await?;
-    } else {
-        let mock_string = textmod_helper::get_mock_string(args.rest());
+#[poise::command(slash_command, track_edits)]
+pub async fn mock(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    let mock_string = textmod_helper::get_mock_string(&string);
 
-        msg.channel_id.say(ctx, mock_string).await?;
-    }
+    poise::say_reply(ctx, mock_string).await?;
 
     Ok(())
 }
 
-#[command]
-pub async fn mockl(ctx: &Context, msg: &Message) -> CommandResult {
-    let input_message = msg
-        .channel_id
-        .messages(ctx, |retriever| retriever.before(msg.id).limit(1))
-        .await?;
+/// Like mock, but uses the last message as text
+#[poise::command(slash_command, track_edits)]
+pub async fn mockl(ctx: crate::Context<'_>) -> CommandResult {
+    let input_message = get_last_message(ctx).await?;
 
-    let mock_string = textmod_helper::get_mock_string(&input_message[0].content);
+    let mock_string = textmod_helper::get_mock_string(&input_message.content);
 
-    msg.channel_id.say(ctx, mock_string).await?;
+    poise::say_reply(ctx, mock_string).await?;
 
     Ok(())
 }
 
 /// Inverts the characters in a string
+///
 /// Usage: `inv <message>`
-#[command]
-#[min_args(1)]
-async fn inv(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to invert"))
-            .await?;
-    } else {
-        let inv_string = textmod_helper::get_inverted_string(args.rest());
+#[poise::command(slash_command, track_edits)]
+pub async fn inv(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    let inv_string = textmod_helper::get_inverted_string(&string);
 
-        msg.channel_id.say(ctx, inv_string).await?;
-    }
+    poise::say_reply(ctx, inv_string).await?;
 
     Ok(())
 }
 
-#[command]
-async fn invl(ctx: &Context, msg: &Message) -> CommandResult {
-    let input_message = msg
-        .channel_id
-        .messages(ctx, |retriever| retriever.before(msg.id).limit(1))
-        .await?;
+/// Like inv, but uses the last message as text
+#[poise::command(slash_command, track_edits)]
+pub async fn invl(ctx: crate::Context<'_>) -> CommandResult {
+    let input_message = get_last_message(ctx).await?;
 
-    let inv_string = textmod_helper::get_inverted_string(&input_message[0].content);
+    let inv_string = textmod_helper::get_inverted_string(&input_message.content);
 
-    msg.channel_id.say(ctx, inv_string).await?;
+    poise::say_reply(ctx, inv_string).await?;
 
     Ok(())
 }
 
 /// Converts the provided string to uppercase letters
+///
 /// Usage: `upp <message>`
-#[command]
-#[min_args(1)]
-async fn upp(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to uppercase"))
-            .await?;
-    } else {
-        msg.channel_id.say(ctx, args.rest().to_uppercase()).await?;
-    }
+#[poise::command(slash_command, track_edits)]
+pub async fn upp(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    poise::say_reply(ctx, string.to_uppercase()).await?;
 
     Ok(())
 }
 
-#[command]
-async fn uppl(ctx: &Context, msg: &Message) -> CommandResult {
-    let input_message = msg
-        .channel_id
-        .messages(ctx, |retriever| retriever.before(msg.id).limit(1))
-        .await?;
+/// Like upp, but uses the last message as text
+#[poise::command(slash_command, track_edits)]
+pub async fn uppl(ctx: crate::Context<'_>) -> CommandResult {
+    let input_message = get_last_message(ctx).await?;
 
-    msg.channel_id
-        .say(ctx, input_message[0].content.to_uppercase())
-        .await?;
+    poise::say_reply(ctx, input_message.content.to_uppercase()).await?;
 
     Ok(())
 }
 
 /// Converts the provided string to lowercase
+///
 /// Usage: `low <message>`
-#[command]
-#[min_args(1)]
-async fn low(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to lowercase"))
-            .await?;
-    } else {
-        msg.channel_id.say(ctx, args.rest().to_lowercase()).await?;
-    }
+#[poise::command(slash_command, track_edits)]
+pub async fn low(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    poise::say_reply(ctx, string.to_lowercase()).await?;
 
     Ok(())
 }
 
-#[command]
-async fn lowl(ctx: &Context, msg: &Message) -> CommandResult {
-    let input_message = msg
-        .channel_id
-        .messages(ctx, |retriever| retriever.before(msg.id).limit(1))
-        .await?;
+/// Like low, but uses the last message as text
+#[poise::command(slash_command, track_edits)]
+pub async fn lowl(ctx: crate::Context<'_>) -> CommandResult {
+    let input_message = get_last_message(ctx).await?;
 
-    msg.channel_id
-        .say(ctx, input_message[0].content.to_lowercase())
-        .await?;
+    poise::say_reply(ctx, input_message.content.to_lowercase()).await?;
 
     Ok(())
 }
 
 /// Puts a random amount of spaces between each character of the message
+///
 /// Usage: `space <message>`
-#[command]
-#[min_args(1)]
-async fn space(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to space out"))
-            .await?;
-    } else {
-        let spaced_string = textmod_helper::get_spaced_string(args.rest(), false);
+#[poise::command(slash_command, track_edits)]
+pub async fn space(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    let spaced_string = textmod_helper::get_spaced_string(&string, false);
 
-        msg.channel_id.say(ctx, spaced_string).await?;
-    }
+    poise::say_reply(ctx, spaced_string).await?;
 
     Ok(())
 }
 
-#[command]
-async fn spacel(ctx: &Context, msg: &Message) -> CommandResult {
-    let input_message = msg
-        .channel_id
-        .messages(ctx, |retriever| retriever.before(msg.id).limit(1))
-        .await?;
+/// Like space, but uses the last message as text
+#[poise::command(slash_command, track_edits)]
+pub async fn spacel(ctx: crate::Context<'_>) -> CommandResult {
+    let input_message = get_last_message(ctx).await?;
 
-    let spaced_string = textmod_helper::get_spaced_string(&input_message[0].content, false);
+    let spaced_string = textmod_helper::get_spaced_string(&input_message.content, false);
 
-    msg.channel_id.say(ctx, spaced_string).await?;
+    poise::say_reply(ctx, spaced_string).await?;
 
     Ok(())
 }
 
 /// Similar to space, but puts a larger amount of space between each character
+///
 /// Usage: `biggspace <message>`
-#[command]
-#[aliases("bigspace")]
-#[min_args(1)]
-async fn biggspace(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(
-                ctx,
-                JesterError::MissingError("string to B I G G S P A C E"),
-            )
-            .await?;
-    } else {
-        let bigspace_string = textmod_helper::get_spaced_string(args.rest(), true);
+#[poise::command(slash_command, track_edits, aliases("bigspace"))]
+pub async fn biggspace(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    let bigspace_string = textmod_helper::get_spaced_string(&string, true);
 
-        msg.channel_id.say(ctx, bigspace_string).await?;
-    }
+    poise::say_reply(ctx, bigspace_string).await?;
 
     Ok(())
 }
 
-#[command]
-async fn biggspacel(ctx: &Context, msg: &Message) -> CommandResult {
-    let input_message = msg
-        .channel_id
-        .messages(ctx, |retriever| retriever.before(msg.id).limit(1))
-        .await?;
+/// Like biggspace, but uses the last message as text
+#[poise::command(slash_command, track_edits)]
+pub async fn biggspacel(ctx: crate::Context<'_>) -> CommandResult {
+    let input_message = get_last_message(ctx).await?;
 
-    let bigspace_string = textmod_helper::get_spaced_string(&input_message[0].content, true);
+    let bigspace_string = textmod_helper::get_spaced_string(&input_message.content, true);
 
-    msg.channel_id.say(ctx, bigspace_string).await?;
+    poise::say_reply(ctx, bigspace_string).await?;
 
     Ok(())
 }
 
-#[command]
-async fn h4ck(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to h4ck"))
-            .await?;
-    } else {
-        let hacked_string = textmod_helper::get_hacked_string(args.rest());
+/// Become a hackerman by making h4ck3d w0rd5
+#[poise::command(slash_command, track_edits)]
+pub async fn h4ck(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    let hacked_string = textmod_helper::get_hacked_string(&string);
 
-        msg.channel_id.say(ctx, hacked_string).await?;
-    }
+    poise::say_reply(ctx, hacked_string).await?;
 
     Ok(())
 }
 
-#[command]
-async fn uwu(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, JesterError::MissingError("string to uwu"))
-            .await?;
-    } else {
-        let uwu_string = textmod_helper::get_uwu_string(args.rest());
+/// Translate to the uwu wanguwage uwu
+#[poise::command(slash_command, track_edits)]
+pub async fn uwu(
+    ctx: crate::Context<'_>,
+    #[description = "Your text"]
+    #[rest]
+    string: String,
+) -> CommandResult {
+    let uwu_string = textmod_helper::get_uwu_string(&string);
 
-        msg.channel_id.say(ctx, uwu_string).await?;
-    }
+    poise::say_reply(ctx, uwu_string).await?;
 
     Ok(())
 }
