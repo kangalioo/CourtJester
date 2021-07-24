@@ -177,6 +177,24 @@ async fn main() -> CommandResult {
     options.command(commands::textchannel_send::bruh(), |f| f);
     options.command(commands::textchannel_send::quote(), |f| f);
     options.command(commands::textchannel_send::vibecheck(), |f| f);
+    options.command(commands::textmod::mock(), |f| f);
+    options.command(commands::textmod::inv(), |f| f);
+    options.command(commands::textmod::upp(), |f| f);
+    options.command(commands::textmod::low(), |f| f);
+    options.command(commands::textmod::space(), |f| f);
+    options.command(commands::textmod::biggspace(), |f| f);
+    options.command(commands::textmod::h4ck(), |f| f);
+    options.command(commands::textmod::uwu(), |f| f);
+    options.command(commands::textmod::mockl(), |f| f);
+    options.command(commands::textmod::invl(), |f| f);
+    options.command(commands::textmod::uppl(), |f| f);
+    options.command(commands::textmod::lowl(), |f| f);
+    options.command(commands::textmod::spacel(), |f| f);
+    options.command(commands::textmod::biggspacel(), |f| f);
+    options.command(commands::utility::avatar(), |f| f);
+    // options.command(commands::utility::kang(), |f| f);
+    options.command(commands::utility::emoji_info(), |f| f);
+    options.command(commands::utility::spoiler(), |f| f);
 
     let prefix_and_slash_command = (
         commands::images::prefix_hug().0,

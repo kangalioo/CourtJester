@@ -1,9 +1,7 @@
 use serenity::framework::standard::macros::group;
 
 use crate::{
-    commands::{
-        config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*, textmod::*, utility::*,
-    },
+    commands::{config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*, utility::*},
     helpers::voice_utils::*,
 };
 
@@ -31,12 +29,10 @@ pub struct General;
 #[description = "Commands than modify text. \n
 Append l in the command to use the last message \n
 Example: `mockl` mocks the last message"]
-#[commands(mock, inv, upp, low, space, biggspace, h4ck, uwu)]
 pub struct Text;
 
 #[group]
 #[help_available(false)]
-#[commands(mockl, invl, uppl, lowl, spacel, biggspacel)]
 pub struct TextLast;
 
 #[group("Senders")]
@@ -78,5 +74,5 @@ pub struct Japan;
 
 #[group("Utility")]
 #[description("Server utility commands")]
-#[commands(avatar, kang, emoji_info, spoiler)]
+#[commands(kang)]
 pub struct Utility;
