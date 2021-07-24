@@ -24,15 +24,26 @@ pub async fn register(ctx: PrefixContext<'_>, #[flag] global: bool) -> CommandRe
         return Err("Can only be used by server owner".into());
     }
 
+    let mut commands_builder = poise::serenity_prelude::CreateApplicationCommands::default();
     let commands = &ctx.framework.options().slash_options.commands;
-    poise::say_prefix_reply(ctx, format!("Registering {} commands...", commands.len())).await?;
     for cmd in commands {
-        if global {
-            cmd.create_global(&ctx.discord.http).await?;
-        } else {
-            cmd.create_in_guild(&ctx.discord.http, guild.id).await?;
-        }
+        commands_builder.create_application_command(|f| cmd.create(f));
+    }
+
+    poise::say_prefix_reply(ctx, format!("Registering {} commands...", commands.len())).await?;
+    let json_value = serde_json::Value::Array(commands_builder.0);
+    if global {
+        ctx.discord
+            .http
+            .create_global_application_commands(&json_value)
+            .await?;
+    } else {
+        ctx.discord
+            .http
+            .create_guild_application_commands(guild.id.0, &json_value)
+            .await?;
     }
     poise::say_prefix_reply(ctx, "Done!".to_owned()).await?;
+
     Ok(())
 }
