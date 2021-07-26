@@ -383,7 +383,7 @@ pub async fn gifsearch(
     Ok(())
 }
 
-pub async fn image_help(ctx: &serenity::client::Context, channel_id: ChannelId) {
+pub async fn image_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "gif: Fetches a random gif from tenor \nNote: The content filter is turned off in an NSFW channel \n\n",
         "hug <mention>: Gives wholesome hugs to someone \n\n",
@@ -393,14 +393,13 @@ pub async fn image_help(ctx: &serenity::client::Context, channel_id: ChannelId) 
         "cry: Emphasizes that you're crying  \n\n",
         "cringe: Emphasizes that something is cringey \n\n");
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Images/Reaction Help");
-                e.description("Description: Various commands that work with images");
-                e.field("Commands", content, false);
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Images/Reaction Help");
+            e.description("Description: Various commands that work with images");
+            e.field("Commands", content, false);
+            e
         })
-        .await;
+    })
+    .await;
 }

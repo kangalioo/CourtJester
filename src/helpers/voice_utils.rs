@@ -179,24 +179,23 @@ pub async fn create_new_timer(ctx: Context, guild_id: GuildId, data: Arc<crate::
     data.voice_timer_map.remove(&guild_id);
 }
 
-pub async fn voice_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn voice_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "summon: Forces the bot to join the voice chat \nAlias: connect \n\n",
         "disconnect: Leaves the voice chat and clears everything \n\n"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Voice Help");
-                e.description("Description: General commands for voice chat");
-                e.field("Commands", content, false);
-                e.footer(|f| {
-                    f.text("The user has to be in the voice chat on execution!");
-                    f
-                });
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Voice Help");
+            e.description("Description: General commands for voice chat");
+            e.field("Commands", content, false);
+            e.footer(|f| {
+                f.text("The user has to be in the voice chat on execution!");
+                f
+            });
+            e
         })
-        .await;
+    })
+    .await;
 }

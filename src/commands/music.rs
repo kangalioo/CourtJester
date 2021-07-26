@@ -4,10 +4,7 @@ use serenity::{
     builder::CreateEmbed,
     client::Context,
     framework::standard::CommandResult,
-    model::{
-        channel::ReactionType,
-        id::{ChannelId, GuildId},
-    },
+    model::{channel::ReactionType, id::GuildId},
 };
 use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
@@ -592,7 +589,7 @@ pub async fn seek(ctx: crate::Context<'_>, #[description = "Time"] time: String)
     Ok(())
 }
 
-pub async fn music_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn music_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "play <URL or search keywords> : Plays the specified track \n\n",
         "pause: Pauses the current track \n\n",
@@ -603,18 +600,17 @@ pub async fn music_help(ctx: &Context, channel_id: ChannelId) {
         "clear (track number): either clears the entire queue, or removes a specific track",
         "queue: See the current queue for the guild and what's playing");
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Music Help");
-                e.description("Description: Commands for playing music");
-                e.field("Commands", content, false);
-                e.footer(|f| {
-                    f.text("For more information on voice commands, please check voice help");
-                    f
-                });
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Music Help");
+            e.description("Description: Commands for playing music");
+            e.field("Commands", content, false);
+            e.footer(|f| {
+                f.text("For more information on voice commands, please check voice help");
+                f
+            });
+            e
         })
-        .await;
+    })
+    .await;
 }

@@ -147,22 +147,21 @@ async fn restore(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-pub async fn prefix_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn prefix_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "prefix: Gets the server's current prefix \n\n",
         "prefix (characters): Sets the server's prefix (Can be one or multiple characters)"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Custom Prefix Help");
-                e.description("Description: Commands for custom bot prefixes");
-                e.field("Commands", content, false);
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Custom Prefix Help");
+            e.description("Description: Commands for custom bot prefixes");
+            e.field("Commands", content, false);
+            e
         })
-        .await;
+    })
+    .await;
 }
 
 /// Custom commands for your server that output a message
@@ -293,23 +292,20 @@ async fn list(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-pub async fn command_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn command_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "set <name> <content>: Sets a new custom command, {user} is replaced with a mention \n\n",
         "remove <name>: Removes an existing custom command \n\n",
         "list: Lists all custom commands in the server"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Custom Command Help");
-                e.description(
-                    "Description: Custom command configuration (For administrators only!)",
-                );
-                e.field("Commands", content, false);
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Custom Command Help");
+            e.description("Description: Custom command configuration (For administrators only!)");
+            e.field("Commands", content, false);
+            e
         })
-        .await;
+    })
+    .await;
 }

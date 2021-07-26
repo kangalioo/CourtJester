@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 
-use serenity::{
-    framework::standard::CommandResult, http::AttachmentType, model::prelude::*, prelude::*,
-};
+use serenity::{framework::standard::CommandResult, http::AttachmentType, model::prelude::*};
 
 use crate::JesterError;
 
@@ -162,7 +160,7 @@ pub async fn spoiler(ctx: crate::PrefixContext<'_>) -> CommandResult {
     Ok(())
 }
 
-pub async fn utility_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn utility_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "avatar (user mention/ID): Gets your own, or the mentioned person's avatar \n\n",
         "spoiler <attachment>: Creates a spoiler from an attached file \n\n",
@@ -170,14 +168,13 @@ pub async fn utility_help(ctx: &Context, channel_id: ChannelId) {
         "einfo <emoji>: Get the information of an emoji"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Miscellaneous Utility Help");
-                e.description("Description: Various utility commands");
-                e.field("Commands", content, false);
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Miscellaneous Utility Help");
+            e.description("Description: Various utility commands");
+            e.field("Commands", content, false);
+            e
         })
-        .await;
+    })
+    .await;
 }
