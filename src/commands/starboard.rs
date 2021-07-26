@@ -1,10 +1,7 @@
 use serenity::{
     client::Context,
     framework::standard::{macros::command, Args, CommandResult, Delimiter},
-    model::{
-        channel::{Message, ReactionType},
-        id::ChannelId,
-    },
+    model::channel::{Message, ReactionType},
     utils::parse_channel,
 };
 use sqlx::PgPool;
@@ -16,7 +13,7 @@ use crate::ConnectionPool;
 #[required_permissions("MANAGE_MESSAGES")]
 #[sub_commands("deactivate", "wizard", "threshold", "channel")]
 async fn starboard(ctx: &Context, msg: &Message) -> CommandResult {
-    starboard_help(ctx, msg.channel_id).await;
+    starboard_help(todo!()).await;
 
     Ok(())
 }
@@ -364,7 +361,7 @@ async fn starboard_wizard_channel(ctx: &Context, msg: &Message, pool: &PgPool) -
     Ok(())
 }
 
-pub async fn starboard_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn starboard_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "wizard: Easy way to setup the starboard \n\n",
         "threshold: Sets the threshold for a message to appear \n\n",
@@ -372,18 +369,17 @@ pub async fn starboard_help(ctx: &Context, channel_id: ChannelId) {
         "deactivate: Deactivates the starboard and re-enables quoting"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Starboard Help");
-                e.description("Description: admin commands for starboarding in a discord server");
-                e.field("Commands", content, false);
-                e.footer(|f| {
-                    f.text("Enabling the starboard will disable the quote command!");
-                    f
-                });
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Starboard Help");
+            e.description("Description: admin commands for starboarding in a discord server");
+            e.field("Commands", content, false);
+            e.footer(|f| {
+                f.text("Enabling the starboard will disable the quote command!");
+                f
+            });
+            e
         })
-        .await;
+    })
+    .await;
 }

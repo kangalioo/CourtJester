@@ -1,4 +1,4 @@
-use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
+use serenity::{framework::standard::CommandResult, model::prelude::*};
 
 use crate::helpers::*;
 
@@ -218,7 +218,7 @@ pub async fn uwu(
     Ok(())
 }
 
-pub async fn textmod_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn textmod_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "mock <message>: Spongebob mocks a string \n\n",
         "inv <message>: Inverts capitalization of each letter in the message \n\n",
@@ -230,21 +230,20 @@ pub async fn textmod_help(ctx: &Context, channel_id: ChannelId) {
         "uwu <message>: Translate to the uwu wanguwage uwu"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Text Modification Help");
-                e.description("Description: Commands that modify text");
-                e.field("Commands", content, false);
-                e.footer(|f| {
-                    f.text(concat!(
-                        "Putting an l in front of any command",
-                        "(except h4ck and uwu) will use the last message"
-                    ));
-                    f
-                });
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Text Modification Help");
+            e.description("Description: Commands that modify text");
+            e.field("Commands", content, false);
+            e.footer(|f| {
+                f.text(concat!(
+                    "Putting an l in front of any command",
+                    "(except h4ck and uwu) will use the last message"
+                ));
+                f
+            });
+            e
         })
-        .await;
+    })
+    .await;
 }

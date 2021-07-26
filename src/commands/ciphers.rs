@@ -1,4 +1,4 @@
-use serenity::{framework::standard::CommandResult, model::prelude::*};
+use serenity::framework::standard::CommandResult;
 
 use crate::{Context, JesterError};
 
@@ -55,20 +55,19 @@ pub async fn b64decode(
     Ok(())
 }
 
-pub async fn cipher_help(ctx: &serenity::prelude::Context, channel_id: ChannelId) {
+pub async fn cipher_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "b64encode <message>: Encodes a message in base64 \n\n",
         "b64decode <b64 string>: Decodes a base64 message"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Cipher Help");
-                e.description("Description: Encoding/Decoding messages");
-                e.field("Commands", content, false);
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Cipher Help");
+            e.description("Description: Encoding/Decoding messages");
+            e.field("Commands", content, false);
+            e
         })
-        .await;
+    })
+    .await;
 }

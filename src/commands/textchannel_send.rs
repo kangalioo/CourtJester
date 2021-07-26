@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
+use serenity::{framework::standard::CommandResult, model::prelude::*};
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -410,7 +410,7 @@ async fn insert_or_update(
     Ok(())
 }
 
-pub async fn sender_help(ctx: &Context, channel_id: ChannelId) {
+pub async fn sender_help(ctx: crate::Context<'_>) {
     let content = concat!(
         "nice: Sends nice to a defined channel \n\n",
         "bruh: Sends a bruh moment to a defined channel \n\n",
@@ -418,18 +418,17 @@ pub async fn sender_help(ctx: &Context, channel_id: ChannelId) {
         "vibecheck: Checks your vibe. Try it out!"
     );
 
-    let _ = channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Textchannel Sender Help");
-                e.description("Description: Commands that send messages to specified channels");
-                e.field("Commands", content, false);
-                e.footer(|f| {
-                    f.text("Adding a channel mention will set the sender channel (Moderator only)");
-                    f
-                });
-                e
-            })
+    let _ = poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.title("Textchannel Sender Help");
+            e.description("Description: Commands that send messages to specified channels");
+            e.field("Commands", content, false);
+            e.footer(|f| {
+                f.text("Adding a channel mention will set the sender channel (Moderator only)");
+                f
+            });
+            e
         })
-        .await;
+    })
+    .await;
 }

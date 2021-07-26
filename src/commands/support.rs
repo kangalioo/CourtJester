@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// Show information about the bot's commands
-#[poise::command(slash_command)]
+#[poise::command(slash_command, track_edits)]
 pub async fn help(
     ctx: crate::Context<'_>,
     #[description = "Specific command to show help about"] subcommand: Option<String>,
@@ -29,17 +29,17 @@ pub async fn help(
     };
 
     match subcommand.as_str() {
-        "prefix" => prefix_help(ctx.discord(), ctx.channel_id()).await,
-        "command" => command_help(ctx.discord(), ctx.channel_id()).await,
-        "starboard" => starboard_help(ctx.discord(), ctx.channel_id()).await,
-        "utilities" => utility_help(ctx.discord(), ctx.channel_id()).await,
-        "senders" => sender_help(ctx.discord(), ctx.channel_id()).await,
-        "ciphers" => cipher_help(ctx.discord(), ctx.channel_id()).await,
-        "text" => textmod_help(ctx.discord(), ctx.channel_id()).await,
-        "voice" => voice_help(ctx.discord(), ctx.channel_id()).await,
-        "music" => music_help(ctx.discord(), ctx.channel_id()).await,
-        "images" => image_help(ctx.discord(), ctx.channel_id()).await,
-        "japan" => japan_help(ctx.discord(), ctx.channel_id()).await,
+        "prefix" => prefix_help(ctx).await,
+        "command" => command_help(ctx).await,
+        "starboard" => starboard_help(ctx).await,
+        "utilities" => utility_help(ctx).await,
+        "senders" => sender_help(ctx).await,
+        "ciphers" => cipher_help(ctx).await,
+        "text" => textmod_help(ctx).await,
+        "voice" => voice_help(ctx).await,
+        "music" => music_help(ctx).await,
+        "images" => image_help(ctx).await,
+        "japan" => japan_help(ctx).await,
         _ => {}
     }
 
