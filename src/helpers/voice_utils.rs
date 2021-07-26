@@ -1,36 +1,29 @@
 use futures::future::{AbortHandle, Abortable};
 use serenity::{
     client::Context,
-    framework::standard::{macros::command, CommandResult},
+    framework::standard::CommandResult,
     model::{
-        channel::Message,
         guild::Guild,
-        id::{ChannelId, GuildId, UserId},
+        id::{ChannelId, GuildId},
     },
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 
-use crate::{BotId, Lavalink, VoiceTimerMap};
-
-pub async fn get_voice_state(
-    ctx: &Context,
-    guild: &Guild,
-    author_id: UserId,
-) -> CommandResult<bool> {
-    let bot_id = ctx.data.read().await.get::<BotId>().cloned().unwrap();
-
-    if !(guild.voice_states.contains_key(&author_id) || guild.voice_states.contains_key(&bot_id)) {
+pub async fn get_voice_state(ctx: crate::Context<'_>, guild: &Guild) -> CommandResult<bool> {
+    if !(guild.voice_states.contains_key(&ctx.author().id)
+        || guild.voice_states.contains_key(&ctx.data().bot_id))
+    {
         return Ok(false);
     }
 
     let user_voice_id = guild
         .voice_states
-        .get(&author_id)
+        .get(&ctx.author().id)
         .and_then(|state| state.channel_id);
     let bot_voice_id = guild
         .voice_states
-        .get(&bot_id)
+        .get(&ctx.data().bot_id)
         .and_then(|state| state.channel_id);
 
     if user_voice_id == bot_voice_id {
@@ -40,15 +33,13 @@ pub async fn get_voice_state(
     }
 }
 
-#[command]
-#[aliases("connect")]
-pub async fn summon(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(ctx).await.unwrap();
-    let bot_id = ctx.data.read().await.get::<BotId>().cloned().unwrap();
+/// Forces the bot to join the voice chat
+#[poise::command(slash_command, aliases("connect"))]
+pub async fn summon(ctx: crate::Context<'_>) -> CommandResult {
+    let guild = ctx.guild().await.unwrap();
 
-    if guild.voice_states.contains_key(&bot_id) {
-        msg.channel_id
-            .say(ctx, "Looks like I'm already in a voice channel! Please disconnect me before summoning me again!")
+    if guild.voice_states.contains_key(&ctx.data().bot_id) {
+        poise::say_reply(ctx, "Looks like I'm already in a voice channel! Please disconnect me before summoning me again!".into())
             .await?;
 
         return Ok(());
@@ -56,37 +47,37 @@ pub async fn summon(ctx: &Context, msg: &Message) -> CommandResult {
 
     let channel_id = guild
         .voice_states
-        .get(&msg.author.id)
+        .get(&ctx.author().id)
         .and_then(|voice_state| voice_state.channel_id);
 
     let voice_channel = match channel_id {
         Some(channel) => channel,
         None => {
-            msg.channel_id
-                .say(ctx, "Please join a voice channel!")
-                .await?;
+            poise::say_reply(ctx, "Please join a voice channel!".into()).await?;
 
             return Ok(());
         }
     };
 
-    match join_voice_internal(ctx, msg, voice_channel).await {
+    match join_voice_internal(ctx, voice_channel).await {
         Ok(_) => {
-            msg.channel_id
-                .say(
-                    ctx,
-                    format!("Joined {}", voice_channel.name(ctx).await.unwrap()),
-                )
-                .await?;
+            poise::say_reply(
+                ctx,
+                format!(
+                    "Joined {}",
+                    voice_channel.name(ctx.discord()).await.unwrap()
+                ),
+            )
+            .await?;
 
-            let ctx_clone = ctx.clone();
+            let ctx_clone = ctx.discord().clone();
+            let data = Arc::clone(&ctx.data());
             tokio::spawn(async move {
-                create_new_timer(ctx_clone, guild.id).await;
+                create_new_timer(ctx_clone, guild.id, data).await;
             });
         }
         Err(_e) => {
-            msg.channel_id
-                .say(ctx, "I couldn't join the voice channel. Please check if I have permission to access it!")
+            poise::say_reply(ctx, "I couldn't join the voice channel. Please check if I have permission to access it!".into())
                 .await?;
         }
     }
@@ -95,57 +86,41 @@ pub async fn summon(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 pub async fn join_voice_internal(
-    ctx: &Context,
-    msg: &Message,
+    ctx: crate::Context<'_>,
     voice_channel: ChannelId,
 ) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
+    let guild_id = ctx.guild_id().unwrap();
 
-    let manager = songbird::get(ctx).await.unwrap().clone();
+    let manager = songbird::get(ctx.discord()).await.unwrap().clone();
 
     let (_, handler) = manager.join_gateway(guild_id, voice_channel).await;
 
     match handler {
-        Ok(conn_info) => {
-            let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
-            lava_client.create_session(&conn_info).await?;
-        }
+        Ok(conn_info) => ctx.data().lavalink.create_session(&conn_info).await?,
         Err(e) => return Err(e.into()),
     }
 
     Ok(())
 }
 
-#[command]
-#[aliases("dc")]
-async fn disconnect(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = ctx
-        .cache
-        .guild_channel_field(msg.channel_id, |channel| channel.guild_id)
-        .await
-        .unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// Leaves the voice chat and clears everything
+#[poise::command(slash_command, aliases("dc"))]
+pub async fn disconnect(ctx: crate::Context<'_>) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    match leavevc_internal(ctx, guild_id).await {
+    match leavevc_internal(&ctx.discord(), guild_id, Arc::clone(ctx.data())).await {
         Ok(_) => {
-            let voice_timer_map = ctx
-                .data
-                .read()
-                .await
-                .get::<VoiceTimerMap>()
-                .cloned()
-                .unwrap();
-
+            let voice_timer_map = &ctx.data().voice_timer_map;
             if voice_timer_map.contains_key(&guild_id) {
                 if let Some(future_guard) = voice_timer_map.get(&guild_id) {
                     future_guard.value().abort();
@@ -153,32 +128,33 @@ async fn disconnect(ctx: &Context, msg: &Message) -> CommandResult {
                 voice_timer_map.remove(&guild_id);
             }
 
-            msg.channel_id.say(ctx, "Left the voice channel!").await?;
+            poise::say_reply(ctx, "Left the voice channel!".into()).await?;
         }
         Err(_e) => {
-            msg.channel_id
-                .say(ctx, "The bot isn't in a voice channel!")
-                .await?;
+            poise::say_reply(ctx, "The bot isn't in a voice channel!".into()).await?;
         }
     }
 
     Ok(())
 }
 
-pub async fn leavevc_internal(ctx: &Context, guild_id: GuildId) -> CommandResult {
+pub async fn leavevc_internal(
+    ctx: &Context,
+    guild_id: GuildId,
+    data: Arc<crate::Data>,
+) -> CommandResult {
     let manager = songbird::get(ctx).await.unwrap().clone();
 
     if manager.get(guild_id).is_some() {
         manager.remove(guild_id).await?;
 
-        let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
-        lava_client.destroy(guild_id).await?;
+        data.lavalink.destroy(guild_id).await?;
 
         {
-            let nodes = lava_client.nodes().await;
+            let nodes = data.lavalink.nodes().await;
             nodes.remove(&guild_id.0);
 
-            let loops = lava_client.loops().await;
+            let loops = data.lavalink.loops().await;
             loops.remove(&guild_id.0);
         }
     } else {
@@ -188,24 +164,19 @@ pub async fn leavevc_internal(ctx: &Context, guild_id: GuildId) -> CommandResult
     Ok(())
 }
 
-pub async fn create_new_timer(ctx: Context, guild_id: GuildId) {
+pub async fn create_new_timer(ctx: Context, guild_id: GuildId, data: Arc<crate::Data>) {
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
-    let future = Abortable::new(leavevc_internal(&ctx, guild_id), abort_registration);
+    let future = Abortable::new(
+        leavevc_internal(&ctx, guild_id, Arc::clone(&data)),
+        abort_registration,
+    );
 
-    let voice_timer_map = ctx
-        .data
-        .read()
-        .await
-        .get::<VoiceTimerMap>()
-        .cloned()
-        .unwrap();
-
-    voice_timer_map.insert(guild_id, abort_handle);
+    data.voice_timer_map.insert(guild_id, abort_handle);
 
     sleep(Duration::from_secs(300)).await;
     let _ = future.await;
 
-    voice_timer_map.remove(&guild_id);
+    data.voice_timer_map.remove(&guild_id);
 }
 
 pub async fn voice_help(ctx: &Context, channel_id: ChannelId) {

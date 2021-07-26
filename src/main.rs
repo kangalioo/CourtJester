@@ -34,8 +34,8 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 
-pub type Context<'a> = poise::Context<'a, Data, CommandError>;
-pub type PrefixContext<'a> = poise::PrefixContext<'a, Data, CommandError>;
+pub type Context<'a> = poise::Context<'a, Arc<Data>, CommandError>;
+pub type PrefixContext<'a> = poise::PrefixContext<'a, Arc<Data>, CommandError>;
 
 #[tokio::main]
 async fn main() -> CommandResult {
@@ -150,7 +150,7 @@ async fn main() -> CommandResult {
         data_struct
     };
 
-    let mut options = poise::FrameworkOptions::<Data, CommandError> {
+    let mut options = poise::FrameworkOptions::<Arc<Data>, CommandError> {
         prefix_options: poise::PrefixFrameworkOptions {
             edit_tracker: Some(poise::EditTracker::for_timespan(
                 std::time::Duration::from_secs(3600),
@@ -193,6 +193,17 @@ async fn main() -> CommandResult {
     options.command(commands::utility::kang(), |f| f);
     options.command(commands::utility::emoji_info(), |f| f);
     options.command(commands::utility::spoiler(), |f| f);
+    options.command(helpers::voice_utils::summon(), |f| f);
+    options.command(helpers::voice_utils::disconnect(), |f| f);
+    options.command(commands::music::play(), |f| f);
+    options.command(commands::music::pause(), |f| f);
+    options.command(commands::music::stop(), |f| f);
+    options.command(commands::music::resume(), |f| f);
+    options.command(commands::music::queue(), |f| f);
+    options.command(commands::music::clear(), |f| f);
+    options.command(commands::music::remove(), |f| f);
+    options.command(commands::music::skip(), |f| f);
+    options.command(commands::music::seek(), |f| f);
 
     let prefix_and_slash_command = (
         commands::images::prefix_hug().0,
@@ -222,7 +233,7 @@ async fn main() -> CommandResult {
     let framework = poise::Framework::new(
         creds.default_prefix,
         ApplicationId(bot_id.0),
-        |_, _, _| Box::pin(async { Ok(data) }),
+        |_, _, _| Box::pin(async { Ok(Arc::new(data)) }),
         options,
     );
 

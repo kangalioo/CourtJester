@@ -3,13 +3,13 @@ use rust_clock::Clock;
 use serenity::{
     builder::CreateEmbed,
     client::Context,
-    framework::standard::{macros::command, Args, CommandResult},
+    framework::standard::CommandResult,
     model::{
-        channel::{Message, ReactionType},
+        channel::ReactionType,
         id::{ChannelId, GuildId},
     },
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 
 use crate::{
@@ -17,55 +17,58 @@ use crate::{
         command_utils, permissions_helper,
         voice_utils::{self, get_voice_state},
     },
-    BotId, JesterError, Lavalink, PermissionType, SpotifyClient, VoiceTimerMap,
+    JesterError, PermissionType,
 };
 
-#[command]
-#[aliases("p")]
-async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let guild = msg.guild(ctx).await.unwrap();
-    let guild_id = msg.guild_id.unwrap();
+async fn react(ctx: crate::Context<'_>, emoji: &str) -> CommandResult {
+    if let crate::Context::Prefix(ctx) = ctx {
+        ctx.msg
+            .react(ctx.discord, ReactionType::Unicode(String::from(emoji)))
+            .await?;
+    }
+    Ok(())
+}
 
-    let bot_id = ctx.data.read().await.get::<BotId>().cloned().unwrap();
+/// Plays the specified track
+#[poise::command(slash_command, aliases("p"))]
+pub async fn play(
+    ctx: crate::Context<'_>,
+    #[rest]
+    #[description = "URL or search keywords"]
+    query: String,
+) -> CommandResult {
+    let guild = ctx.guild().await.unwrap();
+    let guild_id = ctx.guild_id().unwrap();
+
+    let bot_id = &ctx.data().bot_id;
 
     // TODO: Doesn't auto-summon the bot if the bot isn't in the voice channel. Check if queue is empty before running
-    if guild.voice_states.contains_key(&bot_id)
-        && !get_voice_state(ctx, &guild, msg.author.id).await?
-    {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if guild.voice_states.contains_key(&bot_id) && !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
     let voice_channel_id = guild
         .voice_states
-        .get(&msg.author.id)
+        .get(&ctx.author().id)
         .and_then(|voice_state| voice_state.channel_id);
 
     let voice_channel = voice_channel_id.unwrap();
 
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, "Please enter a track URL after the command!")
-            .await?;
+    if query.is_empty() {
+        poise::say_reply(ctx, "Please enter a track URL after the command!".into()).await?;
         return Ok(());
     }
 
-    let manager = songbird::get(ctx).await.unwrap();
-    let voice_timer_map = ctx
-        .data
-        .read()
-        .await
-        .get::<VoiceTimerMap>()
-        .cloned()
-        .unwrap();
+    let manager = songbird::get(ctx.discord()).await.unwrap();
+    let voice_timer_map = &ctx.data().voice_timer_map;
 
     if manager.get(guild_id).is_none() {
-        voice_utils::join_voice_internal(ctx, msg, voice_channel).await?;
+        voice_utils::join_voice_internal(ctx, voice_channel).await?;
     }
 
     if voice_timer_map.contains_key(&guild_id) {
@@ -75,40 +78,44 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         voice_timer_map.remove(&guild_id);
     }
 
-    let args_message = args.message();
-
-    let query = if args_message.contains("https://open.spotify.com") {
-        let track_id = match args_message.rsplit('/').next() {
+    let query = if query.contains("https://open.spotify.com") {
+        let track_id = match query.rsplit('/').next() {
             Some(id) => id,
             None => {
-                msg.channel_id
-                    .say(ctx, JesterError::MissingError("valid Spotify URL"))
-                    .await?;
+                poise::say_reply(
+                    ctx,
+                    JesterError::MissingError("valid Spotify URL").to_string(),
+                )
+                .await?;
                 return Ok(());
             }
         };
 
-        match get_spotify_track_info(track_id, &ctx).await {
+        match get_spotify_track_info(track_id, ctx).await {
             Some(track_info) => track_info,
             None => {
-                msg.channel_id
-                    .say(ctx, "Couldn't find the track on spotify! Check the URL?")
-                    .await?;
+                poise::say_reply(
+                    ctx,
+                    "Couldn't find the track on spotify! Check the URL?".into(),
+                )
+                .await?;
                 return Ok(());
             }
         }
     } else {
-        args_message.to_string()
+        query.to_string()
     };
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     let query_info = lava_client.auto_search_tracks(&query).await?;
 
     if query_info.tracks.is_empty() {
-        msg.channel_id
-            .say(ctx, "Couldn't find the video on YouTube! Check the query?")
-            .await?;
+        poise::say_reply(
+            ctx,
+            "Couldn't find the video on YouTube! Check the query?".into(),
+        )
+        .await?;
         return Ok(());
     }
 
@@ -124,39 +131,31 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let mut cl = Clock::new();
     cl.set_time_ms(track_info.unwrap().length as i64);
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.content("Added to queue:");
-            m.embed(|e| {
-                e.color(0x98fb98);
-                e.title(&track_info.unwrap().title);
-                e.url(&track_info.unwrap().uri);
-                e.field("Uploader", &track_info.unwrap().author, true);
-                e.field("Length", cl.get_time(), true);
-                e.footer(|f| {
-                    f.text(format!("Requested by {}", msg.author.name));
-                    f
-                })
+    poise::send_reply(ctx, |m| {
+        m.content("Added to queue:".into());
+        m.embed(|e| {
+            e.color(0x98fb98);
+            e.title(&track_info.unwrap().title);
+            e.url(&track_info.unwrap().uri);
+            e.field("Uploader", &track_info.unwrap().author, true);
+            e.field("Length", cl.get_time(), true);
+            e.footer(|f| {
+                f.text(format!("Requested by {}", ctx.author().name));
+                f
             })
         })
-        .await?;
+    })
+    .await?;
 
-    let ctx_clone = ctx.clone();
-    tokio::spawn(async move {
-        queue_checker(ctx_clone, guild_id).await;
-    });
+    let data = Arc::clone(ctx.data());
+    let ctx = ctx.discord().clone();
+    tokio::spawn(queue_checker(ctx, guild_id, data));
 
     Ok(())
 }
 
-pub async fn get_spotify_track_info(track_id: &str, ctx: &Context) -> Option<String> {
-    let spotify = ctx
-        .data
-        .read()
-        .await
-        .get::<SpotifyClient>()
-        .cloned()
-        .unwrap();
+pub async fn get_spotify_track_info(track_id: &str, ctx: crate::Context<'_>) -> Option<String> {
+    let spotify = &ctx.data().spotify_client;
 
     if let Ok(track) = spotify.tracks().get_track(track_id, None).await {
         Some(track.data.name + " " + &track.data.artists[0].name)
@@ -165,148 +164,144 @@ pub async fn get_spotify_track_info(track_id: &str, ctx: &Context) -> Option<Str
     }
 }
 
-#[command]
-async fn pause(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// Pauses the current track
+#[poise::command(slash_command)]
+pub async fn pause(ctx: crate::Context<'_>) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     if lava_client.nodes().await.contains_key(&guild_id.0) {
         lava_client.pause(guild_id).await?;
-        msg.react(ctx, ReactionType::Unicode(String::from("⏸")))
-            .await?;
+        react(ctx, "⏸").await?;
 
-        let ctx_clone = ctx.clone();
+        let ctx_clone = ctx.discord().clone();
+        let data = Arc::clone(ctx.data());
         tokio::spawn(async move {
-            voice_utils::create_new_timer(ctx_clone, guild_id).await;
+            voice_utils::create_new_timer(ctx_clone, guild_id, data).await;
         });
     };
 
     Ok(())
 }
 
-#[command]
-async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// Stops the current track and empties the queue. Doesn't disconnect the bot
+#[poise::command(slash_command)]
+pub async fn stop(ctx: crate::Context<'_>) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     if !lava_client.nodes().await.contains_key(&guild_id.0) {
-        msg.channel_id
-            .say(
-                ctx,
-                "The bot isn't connected to a voice channel or node! Please re-run join or play!",
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The bot isn't connected to a voice channel or node! Please re-run join or play!"
+                .into(),
+        )
+        .await?;
         return Ok(());
     }
 
     lava_client.skip(guild_id).await;
     lava_client.stop(guild_id).await?;
-    msg.react(ctx, ReactionType::Unicode(String::from("🛑")))
-        .await?;
+    react(ctx, "🛑").await?;
 
-    let ctx_clone = ctx.clone();
+    let ctx_clone = ctx.discord().clone();
+    let data = Arc::clone(ctx.data());
     tokio::spawn(async move {
-        voice_utils::create_new_timer(ctx_clone, guild_id).await;
+        voice_utils::create_new_timer(ctx_clone, guild_id, data).await;
     });
 
     Ok(())
 }
 
-#[command]
-#[aliases("unpause")]
-async fn resume(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// Resumes the current track
+#[poise::command(slash_command, aliases("unpause"))]
+pub async fn resume(ctx: crate::Context<'_>) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     if !lava_client.nodes().await.contains_key(&guild_id.0) {
-        msg.channel_id
-            .say(
-                ctx,
-                "The bot isn't connected to a voice channel or node! Please re-run join or play!",
-            )
-            .await?;
+        poise::say_reply(
+            ctx,
+            "The bot isn't connected to a voice channel or node! Please re-run join or play!"
+                .into(),
+        )
+        .await?;
 
         return Ok(());
     }
 
-    let voice_timer_map = ctx
-        .data
-        .read()
-        .await
-        .get::<VoiceTimerMap>()
-        .cloned()
-        .unwrap();
+    let voice_timer_map = &ctx.data().voice_timer_map;
 
     if let Some(future_guard) = voice_timer_map.get(&guild_id) {
         future_guard.value().abort();
     }
 
-    lava_client.resume(msg.guild_id.unwrap()).await?;
-    msg.react(ctx, ReactionType::Unicode(String::from("▶")))
-        .await?;
+    lava_client.resume(ctx.guild_id().unwrap()).await?;
+    react(ctx, "▶").await?;
 
     Ok(())
 }
 
-#[command]
-#[aliases("q")]
-async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// See the current queue for the guild and what's playing
+#[poise::command(slash_command, aliases("q"))]
+pub async fn queue(ctx: crate::Context<'_>) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     let nodes = lava_client.nodes().await;
-    let node = match nodes.get(&msg.guild_id.unwrap().0) {
+    let node = match nodes.get(&ctx.guild_id().unwrap().0) {
         Some(node) => node,
         None => {
-            msg.channel_id.say(ctx, "The bot isn't connected to a voice channel or node! Please re-run join or play!").await?;
+            poise::say_reply(
+                ctx,
+                "The bot isn't connected to a voice channel or node! Please re-run join or play!"
+                    .into(),
+            )
+            .await?;
 
             return Ok(());
         }
@@ -315,16 +310,17 @@ async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
     let queue = &node.queue;
 
     if queue.is_empty() && node.now_playing.is_none() {
-        msg.channel_id
-            .say(ctx, "The queue is currently empty!")
-            .await?;
+        poise::say_reply(ctx, "The queue is currently empty!".into()).await?;
 
         return Ok(());
     }
 
     let mut eb = CreateEmbed::default();
     eb.color(0x0377fc);
-    eb.title(format!("Queue for {}", guild_id.name(ctx).await.unwrap()));
+    eb.title(format!(
+        "Queue for {}",
+        guild_id.name(ctx.discord()).await.unwrap()
+    ));
 
     if let Some(t) = node.now_playing.as_ref() {
         let t_info = t.track.info.as_ref();
@@ -363,35 +359,26 @@ async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
         eb.field("Next Songs", queue_string, false);
     }
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.0 = eb.0;
-                e
-            })
+    poise::send_reply(ctx, |m| {
+        m.embed(|e| {
+            e.0 = eb.0;
+            e
         })
-        .await?;
+    })
+    .await?;
 
     Ok(())
 }
 
-async fn queue_checker(ctx: Context, guild_id: GuildId) {
+async fn queue_checker(ctx: Context, guild_id: GuildId, data: Arc<crate::Data>) {
     loop {
         sleep(Duration::from_secs(60)).await;
         {
-            let (voice_timer_map, lava_client) = {
-                let data = ctx.data.read().await;
-                let voice_timer_map = data.get::<VoiceTimerMap>().cloned().unwrap();
-                let lava_client = data.get::<Lavalink>().cloned().unwrap();
-
-                (voice_timer_map, lava_client)
-            };
-
-            if voice_timer_map.get(&guild_id).is_some() {
+            if data.voice_timer_map.get(&guild_id).is_some() {
                 return;
             }
 
-            let nodes = lava_client.nodes().await;
+            let nodes = data.lavalink.nodes().await;
             let node = match nodes.get(&guild_id.0) {
                 Some(node) => node,
                 None => return,
@@ -399,8 +386,9 @@ async fn queue_checker(ctx: Context, guild_id: GuildId) {
 
             if node.queue.is_empty() && node.now_playing.is_none() {
                 let ctx_clone = ctx.clone();
+                let data = Arc::clone(&data);
                 tokio::spawn(async move {
-                    voice_utils::create_new_timer(ctx_clone, guild_id).await;
+                    voice_utils::create_new_timer(ctx_clone, guild_id, data).await;
                 });
                 return;
             }
@@ -408,106 +396,100 @@ async fn queue_checker(ctx: Context, guild_id: GuildId) {
     }
 }
 
-#[command]
-#[aliases("c")]
-async fn clear(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(ctx).await.unwrap();
+/// Either clears the entire queue, or removes a specific track
+#[poise::command(slash_command, aliases("c"))]
+pub async fn clear(ctx: crate::Context<'_>) -> CommandResult {
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     let nodes = lava_client.nodes().await;
-    let mut node = match nodes.get_mut(&msg.guild_id.unwrap().0) {
+    let mut node = match nodes.get_mut(&ctx.guild_id().unwrap().0) {
         Some(node) => node,
         None => {
-            msg.channel_id.say(
-                ctx, "The bot isn't connected to a voice channel or node! Please re-run join or play!").await?;
+            poise::say_reply(
+                ctx,
+                "The bot isn't connected to a voice channel or node! Please re-run join or play!"
+                    .into(),
+            )
+            .await?;
             return Ok(());
         }
     };
 
-    if !permissions_helper::check_permission(ctx, msg, None, false).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                JesterError::PermissionError(PermissionType::UserPerm("manage messages")),
-            )
-            .await?;
+    if !permissions_helper::check_permission_2(ctx, None, false).await? {
+        poise::say_reply(
+            ctx,
+            JesterError::PermissionError(PermissionType::UserPerm("manage messages")).to_string(),
+        )
+        .await?;
     } else {
         node.queue.drain(1..);
 
-        msg.react(ctx, ReactionType::Unicode(String::from("💣")))
-            .await?;
+        react(ctx, "💣").await?;
     }
 
     Ok(())
 }
 
-#[command]
-#[aliases("r")]
-async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild = msg.guild(ctx).await.unwrap();
+/// Remove a track from the queue
+#[poise::command(slash_command, aliases("r"))]
+pub async fn remove(
+    ctx: crate::Context<'_>,
+    #[description = "Track number"] clear_num: usize,
+) -> CommandResult {
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     let nodes = lava_client.nodes().await;
-    let mut node = match nodes.get_mut(&msg.guild_id.unwrap().0) {
+    let mut node = match nodes.get_mut(&ctx.guild_id().unwrap().0) {
         Some(node) => node,
         None => {
-            msg.channel_id.say(
-                ctx, "The bot isn't connected to a voice channel or node! Please re-run join or play!").await?;
+            poise::say_reply(
+                ctx,
+                "The bot isn't connected to a voice channel or node! Please re-run join or play!"
+                    .into(),
+            )
+            .await?;
             return Ok(());
         }
     };
 
-    let clear_num = match args.single::<usize>() {
-        Ok(size) => {
-            if size == 0 {
-                msg.channel_id
-                    .say(ctx, JesterError::MissingError("number greater than 0"))
-                    .await?;
+    if clear_num == 0 {
+        poise::say_reply(
+            ctx,
+            JesterError::MissingError("number greater than 0").to_string(),
+        )
+        .await?;
 
-                return Ok(());
-            }
-
-            size
-        }
-        Err(_) => {
-            msg.channel_id
-                .say(ctx, JesterError::MissingError("number"))
-                .await?;
-
-            return Ok(());
-        }
-    };
+        return Ok(());
+    }
 
     let queue = &mut node.queue;
 
     let track_queue = match queue.get(clear_num) {
         Some(track_queue) => track_queue,
         None => {
-            msg.channel_id
-                .say(ctx, "This number doesn't exist in the queue!")
-                .await?;
+            poise::say_reply(ctx, "This number doesn't exist in the queue!".into()).await?;
 
             return Ok(());
         }
@@ -517,36 +499,32 @@ async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     queue.remove(clear_num);
 
-    msg.channel_id
-        .say(ctx, format!("Successfully removed track {}", name))
-        .await?;
+    poise::say_reply(ctx, format!("Successfully removed track {}", name)).await?;
 
     Ok(())
 }
 
-#[command]
-#[aliases("s")]
-async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// Skips the current track. If there are no tracks in the queue, the player is stopped
+#[poise::command(slash_command, aliases("s"))]
+pub async fn skip(ctx: crate::Context<'_>) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     if !lava_client.nodes().await.contains_key(&guild_id.0) {
-        msg.channel_id
-            .say(
+        poise::say_reply(
                 ctx,
-                "The bot isn't connected to a voice channel or playing anything! Please re-run join or play!",
+                "The bot isn't connected to a voice channel or playing anything! Please re-run join or play!".into(),
             )
             .await?;
         return Ok(());
@@ -554,62 +532,52 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 
     if lava_client.skip(guild_id).await.is_some() {
         let nodes = lava_client.nodes().await;
-        let node = nodes.get(&msg.guild_id.unwrap().0).unwrap();
+        let node = nodes.get(&ctx.guild_id().unwrap().0).unwrap();
 
         if node.queue.is_empty() && node.now_playing.is_none() {
             lava_client.stop(guild_id).await?;
         }
     }
 
-    msg.react(ctx, ReactionType::Unicode(String::from("⏭️")))
-        .await?;
+    react(ctx, "⏭️").await?;
 
     Ok(())
 }
 
-#[command]
-async fn seek(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild_id = msg.guild_id.unwrap();
-    let guild = msg.guild(ctx).await.unwrap();
+/// Seeks in the current track using hh:mm:ss format. mm:ss is also supported
+#[poise::command(slash_command)]
+pub async fn seek(ctx: crate::Context<'_>, #[description = "Time"] time: String) -> CommandResult {
+    let guild_id = ctx.guild_id().unwrap();
+    let guild = ctx.guild().await.unwrap();
 
-    if !get_voice_state(ctx, &guild, msg.author.id).await? {
-        msg.channel_id
-            .say(
-                ctx,
-                "Please be in a voice channel or in the same voice channel as me!",
-            )
-            .await?;
+    if !get_voice_state(ctx, &guild).await? {
+        poise::say_reply(
+            ctx,
+            "Please be in a voice channel or in the same voice channel as me!".into(),
+        )
+        .await?;
         return Ok(());
     }
 
-    if args.is_empty() {
-        msg.channel_id
-            .say(ctx, "Please provide a valid number of seconds!")
-            .await?;
-        return Ok(());
-    }
-
-    let time = match command_utils::deconstruct_time(args.single::<String>().unwrap()) {
+    let time = match command_utils::deconstruct_time(time) {
         Ok(time) => time,
         Err(e) => {
-            msg.channel_id
-                .say(
-                    ctx,
-                    JesterError::MissingError(&format!("valid amount of {}", e)),
-                )
-                .await?;
+            poise::say_reply(
+                ctx,
+                JesterError::MissingError(&format!("valid amount of {}", e)).to_string(),
+            )
+            .await?;
 
             return Ok(());
         }
     };
 
-    let lava_client = ctx.data.read().await.get::<Lavalink>().cloned().unwrap();
+    let lava_client = &ctx.data().lavalink;
 
     if !lava_client.nodes().await.contains_key(&guild_id.0) {
-        msg.channel_id
-            .say(
+        poise::say_reply(
                 ctx,
-                "The bot isn't connected to a voice channel or playing anything! Please re-run join or play!",
+                "The bot isn't connected to a voice channel or playing anything! Please re-run join or play!".into(),
             )
             .await?;
         return Ok(());
@@ -619,7 +587,7 @@ async fn seek(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         .seek(guild_id, Duration::from_secs(time))
         .await?;
 
-    msg.channel_id.say(ctx, "Seeking!").await?;
+    poise::say_reply(ctx, "Seeking!".into()).await?;
 
     Ok(())
 }

@@ -33,12 +33,7 @@ pub async fn kang(
     #[description = "Emoji to steal"] emoji: EmojiIdentifier,
     #[description = "New name for the emoji"] name: Option<String>,
 ) -> CommandResult {
-    let guild = ctx
-        .guild_id()
-        .unwrap()
-        .to_guild_cached(ctx.discord())
-        .await
-        .unwrap();
+    let guild = ctx.guild().await.unwrap();
     if guild.emojis.contains_key(&emoji.id) {
         poise::say_reply(
             ctx,
