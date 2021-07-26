@@ -192,7 +192,7 @@ async fn main() -> CommandResult {
     options.command(commands::textmod::spacel(), |f| f);
     options.command(commands::textmod::biggspacel(), |f| f);
     options.command(commands::utility::avatar(), |f| f);
-    // options.command(commands::utility::kang(), |f| f);
+    options.command(commands::utility::kang(), |f| f);
     options.command(commands::utility::emoji_info(), |f| f);
     options.command(commands::utility::spoiler(), |f| f);
 

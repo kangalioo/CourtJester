@@ -1,10 +1,7 @@
 use std::borrow::Cow;
 
 use serenity::{
-    framework::standard::{macros::command, Args, CommandResult},
-    http::AttachmentType,
-    model::prelude::*,
-    prelude::*,
+    framework::standard::CommandResult, http::AttachmentType, model::prelude::*, prelude::*,
 };
 
 use crate::JesterError;
@@ -25,26 +22,29 @@ pub async fn avatar(
     Ok(())
 }
 
-#[command]
-#[aliases("steal")]
-#[required_permissions("MANAGE_EMOJIS_AND_STICKERS")]
-pub async fn kang(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let emoji = match args.single::<EmojiIdentifier>() {
-        Ok(id) => id,
-        Err(_) => {
-            msg.channel_id
-                .say(ctx, JesterError::MissingError("custom emoji"))
-                .await?;
-
-            return Ok(());
-        }
-    };
-
-    let guild = msg.guild(ctx).await.unwrap();
+/// Steal an emoji from anywhere and load it to your server. Requires the `manage emojis` permission
+#[poise::command(
+    slash_command,
+    aliases("steal"),
+    required_permissions = "MANAGE_EMOJIS_AND_STICKERS"
+)]
+pub async fn kang(
+    ctx: crate::Context<'_>,
+    #[description = "Emoji to steal"] emoji: EmojiIdentifier,
+    #[description = "New name for the emoji"] name: Option<String>,
+) -> CommandResult {
+    let guild = ctx
+        .guild_id()
+        .unwrap()
+        .to_guild_cached(ctx.discord())
+        .await
+        .unwrap();
     if guild.emojis.contains_key(&emoji.id) {
-        msg.channel_id
-            .say(ctx, "This emoji already exists in this server! Aborting...")
-            .await?;
+        poise::say_reply(
+            ctx,
+            "This emoji already exists in this server! Aborting...".into(),
+        )
+        .await?;
 
         return Ok(());
     }
@@ -58,23 +58,25 @@ pub async fn kang(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     let encoded_bytes = base64::encode(image_bytes);
     let formatted_bytes = format!("data:image/{};base64,{}", ext, encoded_bytes);
 
-    let name = args.single::<String>().unwrap_or(emoji.name);
+    let name = name.unwrap_or(emoji.name);
 
-    match guild.create_emoji(ctx, &name, &formatted_bytes).await {
+    match guild
+        .create_emoji(ctx.discord(), &name, &formatted_bytes)
+        .await
+    {
         Ok(new_emoji) => {
-            msg.channel_id
-                .say(
-                    ctx,
-                    format!("New emoji {} created! {}", new_emoji.name, new_emoji),
-                )
-                .await?;
+            poise::say_reply(
+                ctx,
+                format!("New emoji {} created! {}", new_emoji.name, new_emoji),
+            )
+            .await?;
 
             Ok(())
         }
         Err(e) => {
-            msg.channel_id.say(
+            poise::say_reply(
                 ctx,
-                "Something went wrong with emoji creation. Check your emoji limit? The error message is below."
+                "Something went wrong with emoji creation. Check your emoji limit? The error message is below.".into()
             ).await?;
 
             Err(e.into())

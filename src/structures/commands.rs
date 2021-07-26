@@ -1,7 +1,7 @@
 use serenity::framework::standard::macros::group;
 
 use crate::{
-    commands::{config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*, utility::*},
+    commands::{config::*, japan::*, music::REMOVE_COMMAND, music::*, starboard::*},
     helpers::voice_utils::*,
 };
 
@@ -74,5 +74,4 @@ pub struct Japan;
 
 #[group("Utility")]
 #[description("Server utility commands")]
-#[commands(kang)]
 pub struct Utility;
