@@ -308,7 +308,7 @@ pub async fn quote(
 }
 
 /// Will you pass the vibecheck?
-#[poise::command(slash_command)]
+#[poise::command(slash_command, discard_spare_arguments)]
 pub async fn vibecheck(ctx: crate::Context<'_>) -> CommandResult {
     poise::say_reply(ctx, "Initiating vibe check...".into()).await?;
 
