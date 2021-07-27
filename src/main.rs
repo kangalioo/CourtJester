@@ -112,7 +112,6 @@ async fn main() -> CommandResult {
             intents.remove(GatewayIntents::DIRECT_MESSAGE_TYPING);
             intents
         })
-        .register_songbird()
         .await
         .expect("Err creating client");
 
@@ -242,7 +241,11 @@ async fn main() -> CommandResult {
     // Start up the bot! If there's an error, let the user know
     if let Err(why) = tokio::try_join!(
         client.start_autosharded(),
-        framework.start(Client::builder(&token).framework(StandardFramework::new()))
+        framework.start(
+            Client::builder(&token)
+                .framework(StandardFramework::new())
+                .register_songbird()
+        )
     ) {
         eprintln!("Client error: {:?}", why);
     }
