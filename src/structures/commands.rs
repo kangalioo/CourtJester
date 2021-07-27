@@ -1,6 +1,6 @@
 use serenity::framework::standard::macros::group;
 
-use crate::commands::{config::*, starboard::*};
+use crate::commands::config::*;
 
 // All command groups
 #[group("Master")]
@@ -47,7 +47,6 @@ pub struct Support;
 
 #[group("Starboard")]
 #[description = "Starboard admin commands"]
-#[commands(starboard)]
 pub struct Starboard;
 
 #[group("Voice")]

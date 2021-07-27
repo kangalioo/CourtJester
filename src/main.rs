@@ -207,6 +207,12 @@ async fn main() -> CommandResult {
     options.command(commands::music::seek(), |f| f);
     options.command(commands::japan::anime(), |f| f);
     options.command(commands::japan::manga(), |f| f);
+    options.command(commands::starboard::starboard(), |f| {
+        f.subcommand(commands::starboard::deactivate(), |f| f)
+            .subcommand(commands::starboard::wizard(), |f| f)
+            .subcommand(commands::starboard::threshold(), |f| f)
+            .subcommand(commands::starboard::channel(), |f| f)
+    });
 
     let prefix_and_slash_command = (
         commands::images::prefix_hug().0,
