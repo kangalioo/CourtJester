@@ -1,6 +1,6 @@
 use serenity::framework::standard::macros::group;
 
-use crate::commands::{config::*, japan::*, starboard::*};
+use crate::commands::{config::*, starboard::*};
 
 // All command groups
 #[group("Master")]
@@ -64,7 +64,6 @@ pub struct Images;
 
 #[group("Japan")]
 #[description("Commands for anime/manga")]
-#[commands(anime, manga)]
 pub struct Japan;
 
 #[group("Utility")]

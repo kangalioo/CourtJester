@@ -1,16 +1,12 @@
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use serenity::{
-    framework::standard::{macros::command, Args, CommandResult},
-    model::prelude::*,
-    prelude::*,
-};
+use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
 use std::fmt::Write;
 use std::time::Duration;
 
 use crate::{
     helpers::embed_store,
-    structures::{cmd_data::ReqwestClient, errors::JesterError, AnimeResult, MangaResult},
+    structures::{errors::JesterError, AnimeResult, MangaResult},
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,24 +39,15 @@ impl ResultType {
     }
 }
 
-#[command]
-async fn anime(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(
-                ctx,
-                JesterError::MissingError("anime title for me to work with!"),
-            )
-            .await?;
+#[poise::command]
+pub async fn anime(ctx: crate::PrefixContext<'_>, #[rest] title: String) -> CommandResult {
+    let msg = ctx.msg;
 
-        return Ok(());
-    }
-
-    let results = match fetch_info(ctx, "anime", args.rest()).await {
+    let results = match fetch_info(ctx, "anime", &title).await {
         Ok(info) => info.results,
         Err(_) => {
             msg.channel_id
-                .say(ctx, "Couldn't find your request on MAL!")
+                .say(ctx.discord, "Couldn't find your request on MAL!")
                 .await?;
 
             return Ok(());
@@ -84,7 +71,7 @@ async fn anime(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let sent_message = msg
         .channel_id
-        .send_message(ctx, |m| {
+        .send_message(ctx.discord, |m| {
             m.embed(|e| {
                 e.0 = result_embed.0;
                 e
@@ -92,14 +79,14 @@ async fn anime(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         })
         .await?;
 
-    while let Ok(value) = ask_for_results(ctx, msg).await {
+    while let Ok(value) = ask_for_results(ctx.discord, msg).await {
         let index = value as usize;
 
         if let Some(anime) = animes.get(index - 1) {
             let anime_embed = embed_store::get_anime_embed(anime);
 
             msg.channel_id
-                .send_message(ctx, |m| {
+                .send_message(ctx.discord, |m| {
                     m.embed(|e| {
                         e.0 = anime_embed.0;
                         e
@@ -111,29 +98,20 @@ async fn anime(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         }
     }
 
-    sent_message.delete(ctx).await?;
+    sent_message.delete(ctx.discord).await?;
 
     Ok(())
 }
 
-#[command]
-async fn manga(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    if args.is_empty() {
-        msg.channel_id
-            .say(
-                ctx,
-                JesterError::MissingError("manga title for me to work with!"),
-            )
-            .await?;
+#[poise::command]
+pub async fn manga(ctx: crate::PrefixContext<'_>, #[rest] title: String) -> CommandResult {
+    let msg = ctx.msg;
 
-        return Ok(());
-    }
-
-    let results = match fetch_info(ctx, "manga", args.rest()).await {
+    let results = match fetch_info(ctx, "manga", &title).await {
         Ok(info) => info.results,
         Err(_) => {
             msg.channel_id
-                .say(ctx, "Couldn't find your request on MAL!")
+                .say(ctx.discord, "Couldn't find your request on MAL!")
                 .await?;
 
             return Ok(());
@@ -157,7 +135,7 @@ async fn manga(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let sent_message = msg
         .channel_id
-        .send_message(ctx, |m| {
+        .send_message(ctx.discord, |m| {
             m.embed(|e| {
                 e.0 = result_embed.0;
                 e
@@ -165,14 +143,14 @@ async fn manga(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         })
         .await?;
 
-    while let Ok(value) = ask_for_results(ctx, msg).await {
+    while let Ok(value) = ask_for_results(ctx.discord, msg).await {
         let index = value as usize;
 
         if let Some(manga) = mangas.get(index - 1) {
             let manga_embed = embed_store::get_manga_embed(manga);
 
             msg.channel_id
-                .send_message(ctx, |m| {
+                .send_message(ctx.discord, |m| {
                     m.embed(|e| {
                         e.0 = manga_embed.0;
                         e
@@ -184,7 +162,7 @@ async fn manga(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         }
     }
 
-    sent_message.delete(ctx).await?;
+    sent_message.delete(ctx.discord).await?;
 
     Ok(())
 }
@@ -202,7 +180,10 @@ async fn ask_for_results(ctx: &Context, msg: &Message) -> CommandResult<isize> {
     match result {
         Some(recieved_msg) => {
             if recieved_msg.content == "abort" {
-                let _ = recieved_msg.channel_id.say(ctx, "Aborting...").await;
+                let _ = recieved_msg
+                    .channel_id
+                    .say(ctx, "Aborting...")
+                    .await;
 
                 return Err("Aborted".into());
             }
@@ -220,14 +201,12 @@ async fn ask_for_results(ctx: &Context, msg: &Message) -> CommandResult<isize> {
     }
 }
 
-async fn fetch_info(ctx: &Context, search_type: &str, search: &str) -> CommandResult<Response> {
-    let reqwest_client = ctx
-        .data
-        .read()
-        .await
-        .get::<ReqwestClient>()
-        .cloned()
-        .unwrap();
+async fn fetch_info(
+    ctx: crate::PrefixContext<'_>,
+    search_type: &str,
+    search: &str,
+) -> CommandResult<Response> {
+    let reqwest_client = &ctx.data.reqwest_client;
 
     let url = Url::parse_with_params(
         &format!("https://api.jikan.moe/v3/search/{}", search_type),
