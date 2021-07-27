@@ -203,6 +203,8 @@ async fn main() -> CommandResult {
     options.command(commands::music::remove(), |f| f);
     options.command(commands::music::skip(), |f| f);
     options.command(commands::music::seek(), |f| f);
+    options.command(commands::japan::anime(), |f| f);
+    options.command(commands::japan::manga(), |f| f);
 
     let prefix_and_slash_command = (
         commands::images::prefix_hug().0,
