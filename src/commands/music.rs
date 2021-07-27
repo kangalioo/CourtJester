@@ -18,10 +18,13 @@ use crate::{
 };
 
 async fn react(ctx: crate::Context<'_>, emoji: &str) -> CommandResult {
-    if let crate::Context::Prefix(ctx) = ctx {
-        ctx.msg
-            .react(ctx.discord, ReactionType::Unicode(String::from(emoji)))
-            .await?;
+    match ctx {
+        crate::Context::Prefix(ctx) => {
+            ctx.msg
+                .react(ctx.discord, ReactionType::Unicode(String::from(emoji)))
+                .await?;
+        }
+        crate::Context::Slash(ctx) => poise::say_slash_reply(ctx, emoji.into()).await?,
     }
     Ok(())
 }
