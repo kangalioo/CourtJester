@@ -1,49 +1,29 @@
 use serenity::{
     client::Context,
-    framework::standard::{macros::command, Args, CommandResult, Delimiter},
-    model::channel::{Message, ReactionType},
+    framework::standard::{Args, CommandResult, Delimiter},
+    model::prelude::*,
     utils::parse_channel,
 };
 use sqlx::PgPool;
 use std::time::Duration;
 
-use crate::ConnectionPool;
-
-#[command]
-#[required_permissions("MANAGE_MESSAGES")]
-#[sub_commands("deactivate", "wizard", "threshold", "channel")]
-async fn starboard(ctx: &Context, msg: &Message) -> CommandResult {
-    starboard_help(todo!()).await;
+#[poise::command(required_permissions = "MANAGE_MESSAGES")]
+pub async fn starboard(ctx: crate::PrefixContext<'_>) -> CommandResult {
+    starboard_help(crate::Context::Prefix(ctx)).await;
 
     Ok(())
 }
 
-#[command]
-async fn threshold(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let pool = ctx
-        .data
-        .read()
-        .await
-        .get::<ConnectionPool>()
-        .cloned()
-        .unwrap();
-
-    let new_threshold = match args.single::<u32>() {
-        Ok(threshold) => threshold,
-        Err(_e) => {
-            msg.channel_id
-                .say(ctx, "Please enter a number greater than 0!")
-                .await?;
-            return Ok(());
-        }
-    };
+#[poise::command]
+pub async fn threshold(ctx: crate::PrefixContext<'_>, new_threshold: u32) -> CommandResult {
+    let (ctx, msg, data) = (ctx.discord, ctx.msg, ctx.data);
 
     sqlx::query!(
         "UPDATE guild_info SET starboard_threshold = $1 WHERE guild_id = $2",
         new_threshold as i32,
         msg.guild_id.unwrap().0 as i64
     )
-    .execute(&pool)
+    .execute(&data.connection_pool)
     .await?;
 
     msg.channel_id
@@ -53,33 +33,18 @@ async fn threshold(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
     Ok(())
 }
 
-#[command]
-async fn channel(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let pool = ctx
-        .data
-        .read()
-        .await
-        .get::<ConnectionPool>()
-        .cloned()
-        .unwrap();
-
-    let test_id = args.single::<String>().unwrap();
-    let new_channel = match parse_channel(&test_id) {
-        Some(channel_id) => channel_id,
-        None => {
-            msg.channel_id.say(ctx, "Please mention a channel!").await?;
-            return Ok(());
-        }
-    };
+#[poise::command]
+pub async fn channel(ctx: crate::PrefixContext<'_>, new_channel: ChannelId) -> CommandResult {
+    let (ctx, msg, data) = (ctx.discord, ctx.msg, ctx.data);
 
     sqlx::query!(
         "INSERT INTO text_channels VALUES($1, null, null, $2)
                 ON CONFLICT (guild_id)
                 DO UPDATE SET quote_id = $2",
         msg.guild_id.unwrap().0 as i64,
-        new_channel as i64
+        new_channel.0 as i64
     )
-    .execute(&pool)
+    .execute(&data.connection_pool)
     .await?;
 
     msg.channel_id
@@ -89,15 +54,9 @@ async fn channel(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     Ok(())
 }
 
-#[command]
-async fn deactivate(ctx: &Context, msg: &Message) -> CommandResult {
-    let pool = ctx
-        .data
-        .read()
-        .await
-        .get::<ConnectionPool>()
-        .cloned()
-        .unwrap();
+#[poise::command]
+pub async fn deactivate(ctx: crate::PrefixContext<'_>) -> CommandResult {
+    let (ctx, msg, data) = (ctx.discord, ctx.msg, ctx.data);
 
     let author_id = msg.author.id;
     let channel_id = msg.channel_id;
@@ -134,14 +93,14 @@ async fn deactivate(ctx: &Context, msg: &Message) -> CommandResult {
                     "UPDATE guild_info SET starboard_threshold = null WHERE guild_id = $1",
                     msg.guild_id.unwrap().0 as i64
                 )
-                .execute(&pool)
+                .execute(&data.connection_pool)
                 .await?;
 
                 sqlx::query!(
                     "UPDATE text_channels SET quote_id = null WHERE guild_id = $1",
                     msg.guild_id.unwrap().0 as i64
                 )
-                .execute(&pool)
+                .execute(&data.connection_pool)
                 .await?;
 
                 msg.channel_id
@@ -163,8 +122,10 @@ async fn deactivate(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-#[command]
-async fn wizard(ctx: &Context, msg: &Message) -> CommandResult {
+#[poise::command]
+pub async fn wizard(ctx: crate::PrefixContext<'_>) -> CommandResult {
+    let (ctx, msg, data) = (ctx.discord, ctx.msg, ctx.data);
+
     let intro_string = concat!(
         "Welcome to starboard configuration \n",
         "Reacting with ✅ will disable quoting on your guild!"
@@ -196,15 +157,7 @@ async fn wizard(ctx: &Context, msg: &Message) -> CommandResult {
             let reaction_emoji = &reaction.emoji.as_data();
 
             if reaction_emoji == "✅" {
-                let pool = ctx
-                    .data
-                    .read()
-                    .await
-                    .get::<ConnectionPool>()
-                    .cloned()
-                    .unwrap();
-
-                starboard_wizard_threshold(ctx, msg, &pool).await?
+                starboard_wizard_threshold(ctx, msg, &data.connection_pool).await?
             } else if reaction_emoji == "❌" {
                 msg.channel_id.say(ctx, "Aborting...").await?;
             } else {
